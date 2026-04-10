@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+const fs = require('fs');
+const content = `import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-server";
 import { buildCard, XProfile } from "@/lib/card-engine";
 
@@ -76,4 +77,7 @@ export async function POST(req: NextRequest) {
     console.error("mint-card error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-}
+}`;
+
+fs.writeFileSync('./app/api/mint-card/route.ts', content);
+console.log('route.ts rewritten successfully!');
