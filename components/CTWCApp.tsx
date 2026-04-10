@@ -63,7 +63,7 @@ function EmblemImg({ team, size = 20, style = {} }) {
 let _actx = null;
 function getCtx() {
   try {
-    if (!_actx) _actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!_actx) _actx = new (window.AudioContext || (window as any).webkitAudioContext)();
     if (_actx.state === "suspended") _actx.resume();
     return _actx;
   } catch(e) { return null; }
