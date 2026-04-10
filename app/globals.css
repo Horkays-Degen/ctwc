@@ -1,0 +1,18 @@
+*  { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #070B14; color: #fff; font-family: 'Segoe UI', system-ui, sans-serif; overflow-x: hidden; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0d1117; }
+::-webkit-scrollbar-thumb { background: #2a2d35; border-radius: 3px; }
+
+/* Pack opening animations */
+@keyframes packFloat   { 0%,100%{transform:translateY(0) rotate(-1deg)} 50%{transform:translateY(-18px) rotate(1deg)} }
+@keyframes packRipLeft { to{transform:translateX(-140%) rotate(-22deg);opacity:0} }
+@keyframes flashOut    { 0%{opacity:1} 100%{opacity:0} }
+@keyframes glowBurst   { 0%{transform:scale(0.6);opacity:0} 40%{opacity:1} 100%{transform:scale(2.2);opacity:0} }
+@keyframes cardZoom    { 0%{transform:scale(0.3) rotateY(90deg);opacity:0} 60%{transform:scale(1.08) rotateY(0deg)} 100%{transform:scale(1) rotateY(0deg);opacity:1} }
+@keyframes badgeDrop   { 0%{transform:translateY(-30px);opacity:0} 60%{transform:translateY(6px)} 100%{transform:translateY(0);opacity:1} }
+@keyframes confettiBurst { 0%{transform:translate(0,0) rotate(0deg);opacity:1} 100%{transform:translate(calc(var(--dx)*120px),calc(var(--dy)*120px)) rotate(var(--rot));opacity:0} }
+@keyframes orbitSpin   { from{transform:rotate(0deg) translateX(var(--r)) rotate(0deg)} to{transform:rotate(360deg) translateX(var(--r)) rotate(-360deg)} }
+@keyframes shimmerSweep{ 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes fadeIn      { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }

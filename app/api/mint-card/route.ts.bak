@@ -1,0 +1,110 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase-server";
+import { buildCard, XProfile } from "@/lib/card-engine";
+
+// POST /api/mint-card
+// Body: { x_handle: string }
+// Returns: the created card row
+export async function POST(req: NextRequest) {
+  try {
+    const { x_handle } = await req.json();
+
+    if (!x_handle || typeof x_handle !== "string") {
+      return NextResponse.json({ error: "x_handle is required" }, { status: 400 });
+    }
+
+    const handle = x_handle.replace(/^@/, "").toLowerCase().trim();
+    const supabase = createAdminClient();
+
+    // ── 1. Check if card already exists ──────────────────────
+    const { data: existing } = await supabase
+      .from("cards")
+      .select("*")
+      .eq("x_handle", handle)
+      .single();
+
+    if (existing) {
+      return NextResponse.json({ card: existing, cached: true });
+    }
+
+    // ── 2. Check pool cap (max 400 cards) ────────────────────
+    const { count } = await supabase
+      .from("cards")
+      .select("*", { count: "exact", head: true });
+
+    if ((count ?? 0) >= 400) {
+      return NextResponse.json({ error: "Pool is full (400/400)" }, { status: 403 });
+    }
+
+    // ── 3. Fetch real X profile data ─────────────────────────
+    const bearerToken = process.env.X_API_BEARER_TOKEN;
+    if (!bearerToken) {
+      return NextResponse.json({ error: "X API not configured" }, { status: 500 });
+    }
+
+    const xRes = await fetch(
+      `https://api.twitter.com/2/users/by/username/${handle}` +
+      `?user.fields=name,profile_image_url,public_metrics,verified,verified_type`,
+      { headers: { Authorization: `Bearer ${bearerToken}` } }
+    );
+
+    if (!xRes.ok) {
+      const err = await xRes.json();
+      return NextResponse.json(
+        { error: err?.errors?.[0]?.detail ?? "X API error" },
+        { status: xRes.status }
+      );
+    }
+
+    const xData = await xRes.json();
+    const u = xData.data;
+
+    if (!u) {
+      return NextResponse.json({ error: "X user not found" }, { status: 404 });
+    }
+
+    const profile: XProfile = {
+      x_handle:     handle,
+      display_name: u.name,
+      avatar_url:   (u.profile_image_url ?? "").replace("_normal", "_400x400"),
+      followers:    u.public_metrics?.followers_count  ?? 0,
+      following:    u.public_metrics?.following_count  ?? 0,
+      listed_count: u.public_metrics?.listed_count     ?? 0,
+      tweet_count:  u.public_metrics?.tweet_count      ?? 0,
+      verified:     u.verified ?? (u.verified_type === "blue"),
+    };
+
+    // ── 4. Build card stats ───────────────────────────────────
+    const { stats, ovr, tier, badges } = buildCard(profile);
+
+    // ── 5. Insert card into DB ────────────────────────────────
+    const { data: card, error: insertErr } = await supabase
+      .from("cards")
+      .insert({
+        x_handle:     profile.x_handle,
+        display_name: profile.display_name,
+        avatar_url:   profile.avatar_url,
+        followers:    profile.followers,
+        following:    profile.following,
+        listed_count: profile.listed_count,
+        tweet_count:  profile.tweet_count,
+        verified:     profile.verified,
+        ovr,
+        tier,
+        stats,
+        badges,
+      })
+      .select()
+      .single();
+
+    if (insertErr) {
+      console.error("Insert error:", insertErr);
+      return NextResponse.json({ error: "Failed to save card" }, { status: 500 });
+    }
+
+    return NextResponse.json({ card, cached: false });
+  } catch (err) {
+    console.error("mint-card error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
