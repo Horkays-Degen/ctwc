@@ -641,9 +641,9 @@ function CardReveal({ card, onDone }) {
               background:p.color,
               boxShadow:`0 0 ${p.size}px ${p.color}88`,
               animation:`confettiBurst 1.2s ${p.delay}s cubic-bezier(0.25,0.46,0.45,0.94) both`,
-              "--dx" as any:`${p.dx}px`, "--dy" as any:`${p.dy}px`, "--rot" as any:`${p.rot}deg`,
+              "--dx":`${p.dx}px`, "--dy":`${p.dy}px`, "--rot":`${p.rot}deg`,
               pointerEvents:"none",
-            }}/>
+            } as any}/>
           ))}
 
           {/* Tier badge — replaces "country" from FIFA */}
