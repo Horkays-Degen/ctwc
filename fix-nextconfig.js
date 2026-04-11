@@ -1,4 +1,5 @@
-/** @type {import('next').NextConfig} */
+const fs = require('fs');
+const content = `/** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
@@ -10,4 +11,6 @@ const nextConfig = {
     ],
   },
 };
-module.exports = nextConfig;
+module.exports = nextConfig;`;
+fs.writeFileSync('./next.config.js', content);
+console.log('next.config.js updated!');
