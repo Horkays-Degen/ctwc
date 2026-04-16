@@ -858,7 +858,10 @@ function Nav({ onHome, right }) {
 // ─── LANDING ──────────────────────────────────────────────────
 function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams }) {
   const [hov, setHov] = useState(false);
-  const preview = useRef([createCard(MOCK_PROFILES[1],"ST"),createCard(MOCK_PROFILES[7],"CM")]).current;
+  const [preview, setPreview] = useState<any[]|null>(null);
+useEffect(() => {
+  setPreview([createCard(MOCK_PROFILES[1],"ST"), createCard(MOCK_PROFILES[7],"CM")]);
+}, []);
   const totalSigned = teams.reduce((s,t)=>s+t.memberIds.length,0);
   const fullTeams   = teams.filter(t=>t.memberIds.length===11).length;
   return (
