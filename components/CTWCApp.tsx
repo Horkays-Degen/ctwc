@@ -5,6 +5,41 @@ import { createClient } from "@/lib/supabase";
 // ─── DATA TRANSFORMS (Supabase rows → UI shape) ───────────────
 const SLOT_POSITIONS = ["GK","CB","CB","LB","RB","CM","CM","CAM","LW","RW","ST"];
 
+// Convert a raw tier string ("CT Player", "CT Star", …) → full tier object expected by ShieldCard
+function resolveTier(raw: any) {
+  if (raw && typeof raw === "object" && raw.name) return raw;
+  const TIER_MAP: Record<string, any> = {
+    COMMON:    { name:"Common",    border:"#7B8794", bg:"#3A3D44", bgDark:"#22242A", accent:"#9EA6B0", glow:"rgba(155,162,170,0.3)", textColor:"#C4CAD2", minOvr:0 },
+    RARE:      { name:"Rare",      border:"#3B82F6", bg:"#152B52", bgDark:"#0A1628", accent:"#60A5FA", glow:"rgba(59,130,246,0.4)",  textColor:"#93C5FD", minOvr:60 },
+    EPIC:      { name:"Epic",      border:"#A855F7", bg:"#2D1250", bgDark:"#180828", accent:"#C084FC", glow:"rgba(168,85,247,0.45)", textColor:"#D8B4FE", minOvr:75 },
+    LEGENDARY: { name:"Legendary", border:"#D4A537", bg:"#4A3410", bgDark:"#2A1D06", accent:"#FBBF24", glow:"rgba(212,165,55,0.55)", textColor:"#FDE68A", minOvr:90 },
+  };
+  const nameToKey: Record<string, string> = {
+    "CT Player": "COMMON", "CT Star": "RARE", "CT Elite": "EPIC",
+    "CT Legend": "LEGENDARY", "Mythic": "LEGENDARY",
+    "Common": "COMMON", "Rare": "RARE", "Epic": "EPIC", "Legendary": "LEGENDARY",
+  };
+  const key = nameToKey[raw as string] ?? "COMMON";
+  return TIER_MAP[key];
+}
+
+// Convert a raw position string ("CM", "GK", …) or null → full position object expected by ShieldCard
+function resolvePosition(raw: any) {
+  if (raw && typeof raw === "object" && raw.code) return raw;
+  const ALL_POSITIONS = [
+    { code:"GK",  cat:"GK",  weight:1 }, { code:"CB",  cat:"DEF", weight:2 },
+    { code:"RB",  cat:"DEF", weight:1 }, { code:"LB",  cat:"DEF", weight:1 },
+    { code:"CDM", cat:"MID", weight:1 }, { code:"CM",  cat:"MID", weight:1 },
+    { code:"CAM", cat:"MID", weight:1 }, { code:"RW",  cat:"FWD", weight:1 },
+    { code:"LW",  cat:"FWD", weight:1 }, { code:"ST",  cat:"FWD", weight:1 },
+  ];
+  if (typeof raw === "string") {
+    const found = ALL_POSITIONS.find(p => p.code === raw);
+    if (found) return found;
+  }
+  return { code:"CM", cat:"MID", weight:1 };
+}
+
 function transformCard(row: any) {
   return {
     id:          row.id || '',
@@ -12,17 +47,20 @@ function transformCard(row: any) {
     displayName: row.display_name || row.x_handle || 'CT Player',
     avatarUrl:   row.avatar_url || '',
     ovr:         row.ovr || 60,
-    tier:        row.tier || 'CT Player',
+    tier:        resolveTier(row.tier),
     stats:       row.stats || { ENG:60, INF:60, CLT:60, VOL:60, VRL:60, OVR:60 },
     badges:      row.badges || [],
     teamId:      row.team_id || null,
-    position:    row.position || null,
+    position:    resolvePosition(row.position),
     rawProfile: {
-      followers:    row.followers || 0,
+      followers:      row.followers || 0,
       followingCount: row.following || 0,
-      listedCount:  row.listed_count || 0,
-      tweetCount:   row.tweet_count || 0,
-      verified:     row.verified || false,
+      listedCount:    row.listed_count || 0,
+      tweetCount:     row.tweet_count || 0,
+      verified:       row.verified || false,
+      avgImpressions: 0, avgLikes: 0, avgRetweets: 0,
+      avgQuotes: 0, avgReplies: 0, avgBookmarks: 0,
+      accountAgeDays: 365,
     },
   };
 }

@@ -57,6 +57,8 @@ export async function POST(req: NextRequest) {
       };
     }
 
+    const POSITIONS = ["GK","LB","CB","RB","CDM","CM","CAM","LW","ST","RW"];
+    const position = POSITIONS[Math.floor(Math.random() * POSITIONS.length)];
     const { stats, ovr, tier, badges } = buildCard(profile);
     const { data: card, error: insertErr } = await supabase.from("cards").insert({
       x_handle: profile.x_handle,
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest) {
       listed_count: profile.listed_count,
       tweet_count: profile.tweet_count,
       verified: profile.verified,
-      ovr, tier, stats, badges,
+      ovr, tier, position, stats, badges,
     }).select().single();
 
     if (insertErr) return NextResponse.json({ error: "Failed to save card" }, { status: 500 });
