@@ -69,6 +69,13 @@ export async function GET(req: NextRequest) {
 
   const handle   = (u.username ?? "").toLowerCase();
   console.log("[twitter/callback] user:", handle);
+
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("[twitter/callback] SUPABASE_SERVICE_ROLE_KEY is not set in Vercel env vars!");
+    return NextResponse.redirect(`${appUrl}?error=mint_failed`);
+  }
+  console.log("[twitter/callback] supabase url prefix:", (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").slice(0, 40));
+
   const supabase = createAdminClient();
 
   // ── If already claimed, just redirect back ───────────────────
