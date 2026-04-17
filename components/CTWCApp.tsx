@@ -1704,14 +1704,16 @@ export default function CTWCApp() {
         no_user:        "X user not found.",
         mint_failed:    "Card minting failed — please try again.",
       };
-      setMintError(msgs[oauthError] ?? "Something went wrong — please try again.");
-      window.history.replaceState({}, "", "/");
+      setMintError(msgs[oauthError] ?? `Unknown error: ${oauthError}`);
+      // DEBUG: not clearing URL so we can see what came back
+      // window.history.replaceState({}, "", "/");
       return;
     }
 
     if (justClaimed) {
       // Card was minted by the OAuth callback — fetch it from Supabase
-      window.history.replaceState({}, "", "/");
+      // DEBUG: not clearing URL so we can see what came back
+      // window.history.replaceState({}, "", "/");
       (async () => {
         const supabase = createClient();
         const { data } = await supabase
