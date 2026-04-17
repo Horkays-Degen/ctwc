@@ -856,7 +856,7 @@ function Nav({ onHome, right }) {
 }
 
 // ─── LANDING ──────────────────────────────────────────────────
-function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams }) {
+function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard, onMyTeam }) {
   const [hov, setHov] = useState(false);
   const preview = useRef([createCard(MOCK_PROFILES[1],"ST"), createCard(MOCK_PROFILES[7],"CM")]).current;
   const totalSigned = teams.reduce((s,t)=>s+t.memberIds.length,0);
@@ -885,9 +885,15 @@ function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams }) {
             <div style={{display:"inline-block",padding:"5px 13px",borderRadius:20,background:"rgba(212,165,55,0.1)",border:"1px solid rgba(212,165,55,0.18)",fontSize:10,fontWeight:700,color:"#FBBF24",marginBottom:20,letterSpacing:1.5}}>SEASON 1 — REGISTRATION OPEN</div>
             <h1 style={{fontSize:46,fontWeight:900,lineHeight:1.07,margin:0,letterSpacing:-1}}>Crypto Twitter.<br/><span style={{background:"linear-gradient(90deg,#FBBF24,#D4A537,#F59E0B)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>World Cup Cards.</span></h1>
             <p style={{fontSize:15,color:"rgba(255,255,255,0.48)",lineHeight:1.68,margin:"20px 0 30px",maxWidth:410}}>Claim your card. Join one of 32 teams. 400 spots total. Tournament kicks off when registration closes.</p>
-            <button onClick={()=>{SFX.click();onConnect();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)} style={{padding:"14px 32px",fontSize:14,fontWeight:700,color:"#1a1a1a",background:hov?"linear-gradient(135deg,#F59E0B,#D4A537)":"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,cursor:"pointer",boxShadow:hov?"0 0 26px rgba(212,165,55,0.45)":"0 4px 14px rgba(212,165,55,0.22)",transition:"all 0.3s",display:"flex",alignItems:"center",gap:9}}>
-              <span style={{fontSize:17}}>𝕏</span> Connect & Claim Your Card
-            </button>
+            {myCard ? (
+              <button onClick={()=>{SFX.click();onMyTeam();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)} style={{padding:"14px 32px",fontSize:14,fontWeight:700,color:"#1a1a1a",background:hov?"linear-gradient(135deg,#F59E0B,#D4A537)":"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,cursor:"pointer",boxShadow:hov?"0 0 26px rgba(212,165,55,0.45)":"0 4px 14px rgba(212,165,55,0.22)",transition:"all 0.3s",display:"flex",alignItems:"center",gap:9}}>
+                ⚽ Go to My Team — OVR {myCard.ovr}
+              </button>
+            ) : (
+              <button onClick={()=>{SFX.click();onConnect();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)} style={{padding:"14px 32px",fontSize:14,fontWeight:700,color:"#1a1a1a",background:hov?"linear-gradient(135deg,#F59E0B,#D4A537)":"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,cursor:"pointer",boxShadow:hov?"0 0 26px rgba(212,165,55,0.45)":"0 4px 14px rgba(212,165,55,0.22)",transition:"all 0.3s",display:"flex",alignItems:"center",gap:9}}>
+                <span style={{fontSize:17}}>𝕏</span> Connect & Claim Your Card
+              </button>
+            )}
             {/* Live stats */}
             <div style={{display:"flex",gap:24,marginTop:32,flexWrap:"wrap"}}>
               {[
@@ -1669,6 +1675,7 @@ export default function CTWCApp() {
   const [loading,    setLoading]    = useState(true);
   const [mintLoading,setMintLoading]= useState(false);
   const [mintError,  setMintError]  = useState<string|null>(null);
+  const [myHandle,   setMyHandle]   = useState<string|null>(null);
 
   const supabase = createClient();
 
@@ -1688,12 +1695,14 @@ export default function CTWCApp() {
 
   useEffect(() => { loadData(); }, []);
 
-  // ── Handle ?just_claimed=<handle> redirect from X OAuth ──────
+  // ── Init: OAuth redirect + session restore from localStorage ──
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
+    const params      = new URLSearchParams(window.location.search);
     const justClaimed = params.get("just_claimed");
     const oauthError  = params.get("error");
+
+    window.history.replaceState({}, "", "/");
 
     if (oauthError) {
       const msgs: Record<string,string> = {
@@ -1705,28 +1714,36 @@ export default function CTWCApp() {
         mint_failed:    "Card minting failed — please try again.",
       };
       setMintError(msgs[oauthError] ?? `Unknown error: ${oauthError}`);
-      // DEBUG: not clearing URL so we can see what came back
-      // window.history.replaceState({}, "", "/");
       return;
     }
 
-    if (justClaimed) {
-      // Card was minted by the OAuth callback — fetch it from Supabase
-      // DEBUG: not clearing URL so we can see what came back
-      // window.history.replaceState({}, "", "/");
-      (async () => {
-        const supabase = createClient();
-        const { data } = await supabase
-          .from("cards").select("*").eq("x_handle", justClaimed).single();
-        if (data) {
-          const card = transformCard(data);
-          setPending(card);
-          setMyCardId(card.id);
-          await loadData();
-          setPage("reveal");
-        }
-      })();
-    }
+    // New mint takes priority; fall back to stored session
+    const handle = justClaimed || localStorage.getItem("ctwc_handle");
+    if (!handle) return;
+    if (justClaimed) localStorage.setItem("ctwc_handle", justClaimed);
+
+    (async () => {
+      const sb = createClient();
+      const { data } = await sb.from("cards").select("*").eq("x_handle", handle).single();
+      if (!data) {
+        localStorage.removeItem("ctwc_handle");
+        if (justClaimed) setMintError("Card not found — please try again.");
+        return;
+      }
+      const card = transformCard(data);
+      setMyHandle(handle);
+      setPending(card);
+      setMyCardId(card.id);
+      await loadData();
+      if (justClaimed) {
+        setPage("reveal");
+      } else if (data.team_id) {
+        setViewTeamId(data.team_id);
+        setPage("teamPage");
+      } else {
+        setPage("teamSetup");
+      }
+    })();
   }, []);
 
   // ── Real-time: refresh when cards table changes ──────────────
@@ -1842,14 +1859,13 @@ export default function CTWCApp() {
         </div>
       )}
 
-      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams}/>}
+      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams} myCard={pending} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
       {page==="reveal"      && pending && (
         <div style={{minHeight:"100vh",background:"#070B14",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
           <CardReveal card={pending} onDone={afterReveal}/>
           <div style={{marginTop:24,display:"flex",gap:10}}>
-            <button onClick={()=>setPage("connect")} style={{padding:"9px 20px",fontSize:12,fontWeight:600,borderRadius:8,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",color:"#fff",cursor:"pointer"}}>Claim Another</button>
-            <button onClick={afterReveal} style={{padding:"9px 20px",fontSize:12,fontWeight:600,borderRadius:8,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>Continue →</button>
+            <button onClick={afterReveal} style={{padding:"9px 20px",fontSize:12,fontWeight:600,borderRadius:8,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>Continue → Pick Your Team</button>
           </div>
         </div>
       )}

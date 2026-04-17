@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
   const { stats, ovr, tier, badges } = buildCard(profile);
   const position = POSITIONS[Math.floor(Math.random() * POSITIONS.length)];
 
-  const { error: insertErr } = await supabase.from("cards").insert({
+  const { data: newCard, error: insertErr } = await supabase.from("cards").insert({
     x_handle:     profile.x_handle,
     display_name: profile.display_name,
     avatar_url:   profile.avatar_url,
@@ -112,13 +112,13 @@ export async function GET(req: NextRequest) {
     tweet_count:  profile.tweet_count,
     verified:     profile.verified,
     ovr, tier, position, stats, badges,
-  });
+  }).select().single();
 
-  if (insertErr) {
+  if (insertErr || !newCard) {
     console.error("[twitter/callback] insert failed:", insertErr);
     return NextResponse.redirect(`${appUrl}?error=mint_failed`);
   }
 
-  console.log("[twitter/callback] minted card for", handle);
+  console.log("[twitter/callback] minted card for", handle, "id:", newCard.id);
   return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
 }
