@@ -15,9 +15,12 @@ export async function GET(req: NextRequest) {
 
   // Extract codeVerifier from state (format: nonce|codeVerifier)
   const parts        = (state ?? "").split("|");
-  const codeVerifier = parts.length === 2 ? parts[1] : null;
+  const codeVerifier = parts.length >= 2 ? parts.slice(1).join("|") : null;
+
+  console.log("[twitter/callback] code:", !!code, "state parts:", parts.length, "verifier:", !!codeVerifier);
 
   if (!code || !state || !codeVerifier) {
+    console.error("[twitter/callback] missing params — code:", code, "state:", state);
     return NextResponse.redirect(`${appUrl}?error=oauth_failed`);
   }
 
@@ -37,11 +40,14 @@ export async function GET(req: NextRequest) {
   });
 
   if (!tokenRes.ok) {
-    console.error("Token exchange failed:", await tokenRes.text());
+    const body = await tokenRes.text();
+    console.error("[twitter/callback] token exchange failed:", tokenRes.status, body);
     return NextResponse.redirect(`${appUrl}?error=token_failed`);
   }
 
-  const { access_token } = await tokenRes.json();
+  const tokenJson = await tokenRes.json();
+  const access_token = tokenJson.access_token;
+  console.log("[twitter/callback] token exchange OK, has token:", !!access_token);
 
   // ── Fetch the authenticated user's own profile ───────────────
   const userRes = await fetch(
@@ -50,14 +56,19 @@ export async function GET(req: NextRequest) {
   );
 
   if (!userRes.ok) {
-    console.error("Profile fetch failed:", await userRes.text());
+    const body = await userRes.text();
+    console.error("[twitter/callback] profile fetch failed:", userRes.status, body);
     return NextResponse.redirect(`${appUrl}?error=profile_failed`);
   }
 
   const { data: u } = await userRes.json();
-  if (!u) return NextResponse.redirect(`${appUrl}?error=no_user`);
+  if (!u) {
+    console.error("[twitter/callback] no user in profile response");
+    return NextResponse.redirect(`${appUrl}?error=no_user`);
+  }
 
   const handle   = (u.username ?? "").toLowerCase();
+  console.log("[twitter/callback] user:", handle);
   const supabase = createAdminClient();
 
   // ── If already claimed, just redirect back ───────────────────
@@ -65,6 +76,7 @@ export async function GET(req: NextRequest) {
     .from("cards").select("*").eq("x_handle", handle).single();
 
   if (existing) {
+    console.log("[twitter/callback] card already exists for", handle);
     return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
   }
 
@@ -90,7 +102,7 @@ export async function GET(req: NextRequest) {
   const { stats, ovr, tier, badges } = buildCard(profile);
   const position = POSITIONS[Math.floor(Math.random() * POSITIONS.length)];
 
-  await supabase.from("cards").insert({
+  const { error: insertErr } = await supabase.from("cards").insert({
     x_handle:     profile.x_handle,
     display_name: profile.display_name,
     avatar_url:   profile.avatar_url,
@@ -102,5 +114,11 @@ export async function GET(req: NextRequest) {
     ovr, tier, position, stats, badges,
   });
 
+  if (insertErr) {
+    console.error("[twitter/callback] insert failed:", insertErr);
+    return NextResponse.redirect(`${appUrl}?error=mint_failed`);
+  }
+
+  console.log("[twitter/callback] minted card for", handle);
   return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
 }

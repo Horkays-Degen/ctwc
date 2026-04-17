@@ -1702,6 +1702,7 @@ export default function CTWCApp() {
         profile_failed: "Could not fetch your X profile — please try again.",
         pool_full:      "The card pool is full (400/400). Registration is closed.",
         no_user:        "X user not found.",
+        mint_failed:    "Card minting failed — please try again.",
       };
       setMintError(msgs[oauthError] ?? "Something went wrong — please try again.");
       window.history.replaceState({}, "", "/");
