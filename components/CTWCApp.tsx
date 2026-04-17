@@ -5,41 +5,6 @@ import { createClient } from "@/lib/supabase";
 // ─── DATA TRANSFORMS (Supabase rows → UI shape) ───────────────
 const SLOT_POSITIONS = ["GK","CB","CB","LB","RB","CM","CM","CAM","LW","RW","ST"];
 
-// Convert a raw tier string ("CT Player", "CT Star", …) → full tier object expected by ShieldCard
-function resolveTier(raw: any) {
-  if (raw && typeof raw === "object" && raw.name) return raw;
-  const TIER_MAP: Record<string, any> = {
-    COMMON:    { name:"Common",    border:"#7B8794", bg:"#3A3D44", bgDark:"#22242A", accent:"#9EA6B0", glow:"rgba(155,162,170,0.3)", textColor:"#C4CAD2", minOvr:0 },
-    RARE:      { name:"Rare",      border:"#3B82F6", bg:"#152B52", bgDark:"#0A1628", accent:"#60A5FA", glow:"rgba(59,130,246,0.4)",  textColor:"#93C5FD", minOvr:60 },
-    EPIC:      { name:"Epic",      border:"#A855F7", bg:"#2D1250", bgDark:"#180828", accent:"#C084FC", glow:"rgba(168,85,247,0.45)", textColor:"#D8B4FE", minOvr:75 },
-    LEGENDARY: { name:"Legendary", border:"#D4A537", bg:"#4A3410", bgDark:"#2A1D06", accent:"#FBBF24", glow:"rgba(212,165,55,0.55)", textColor:"#FDE68A", minOvr:90 },
-  };
-  const nameToKey: Record<string, string> = {
-    "CT Player": "COMMON", "CT Star": "RARE", "CT Elite": "EPIC",
-    "CT Legend": "LEGENDARY", "Mythic": "LEGENDARY",
-    "Common": "COMMON", "Rare": "RARE", "Epic": "EPIC", "Legendary": "LEGENDARY",
-  };
-  const key = nameToKey[raw as string] ?? "COMMON";
-  return TIER_MAP[key];
-}
-
-// Convert a raw position string ("CM", "GK", …) or null → full position object expected by ShieldCard
-function resolvePosition(raw: any) {
-  if (raw && typeof raw === "object" && raw.code) return raw;
-  const ALL_POSITIONS = [
-    { code:"GK",  cat:"GK",  weight:1 }, { code:"CB",  cat:"DEF", weight:2 },
-    { code:"RB",  cat:"DEF", weight:1 }, { code:"LB",  cat:"DEF", weight:1 },
-    { code:"CDM", cat:"MID", weight:1 }, { code:"CM",  cat:"MID", weight:1 },
-    { code:"CAM", cat:"MID", weight:1 }, { code:"RW",  cat:"FWD", weight:1 },
-    { code:"LW",  cat:"FWD", weight:1 }, { code:"ST",  cat:"FWD", weight:1 },
-  ];
-  if (typeof raw === "string") {
-    const found = ALL_POSITIONS.find(p => p.code === raw);
-    if (found) return found;
-  }
-  return { code:"CM", cat:"MID", weight:1 };
-}
-
 function transformCard(row: any) {
   return {
     id:          row.id || '',
@@ -47,20 +12,17 @@ function transformCard(row: any) {
     displayName: row.display_name || row.x_handle || 'CT Player',
     avatarUrl:   row.avatar_url || '',
     ovr:         row.ovr || 60,
-    tier:        resolveTier(row.tier),
+    tier:        row.tier || 'CT Player',
     stats:       row.stats || { ENG:60, INF:60, CLT:60, VOL:60, VRL:60, OVR:60 },
     badges:      row.badges || [],
     teamId:      row.team_id || null,
-    position:    resolvePosition(row.position),
+    position:    row.position || null,
     rawProfile: {
-      followers:      row.followers || 0,
+      followers:    row.followers || 0,
       followingCount: row.following || 0,
-      listedCount:    row.listed_count || 0,
-      tweetCount:     row.tweet_count || 0,
-      verified:       row.verified || false,
-      avgImpressions: 0, avgLikes: 0, avgRetweets: 0,
-      avgQuotes: 0, avgReplies: 0, avgBookmarks: 0,
-      accountAgeDays: 365,
+      listedCount:  row.listed_count || 0,
+      tweetCount:   row.tweet_count || 0,
+      verified:     row.verified || false,
     },
   };
 }
@@ -977,53 +939,26 @@ function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams }) {
 }
 
 // ─── CONNECT PAGE ─────────────────────────────────────────────
-function ConnectPage({ onClaim, onBack, claimed }) {
-  const [step,setStep]=useState("select"),[profile,setProfile]=useState(null),[handle,setHandle]=useState(""),[err,setErr]=useState("");
-  const attempt=(p)=>{setErr("");if(claimed.has(p.handle.toLowerCase())){setErr(`@${p.handle} has already claimed a card!`);return;}setProfile(p);setStep("loading");setTimeout(()=>setStep("preview"),2000);};
-  const custom=()=>{const h=handle.replace("@","").trim();if(!h)return;if(claimed.has(h.toLowerCase())){setErr(`@${h} already claimed!`);return;}attempt({handle:h,displayName:h,followers:Math.floor(Math.random()*150000)+800,following:Math.floor(Math.random()*3000)+80,tweetCount:Math.floor(Math.random()*20000)+400,listedCount:Math.floor(Math.random()*1500)+10,accountAgeDays:Math.floor(Math.random()*3500)+180,verified:Math.random()>0.85,avgImpressions:Math.floor(Math.random()*40000)+500,avgLikes:Math.floor(Math.random()*1500)+20,avgRetweets:Math.floor(Math.random()*400)+5,avgQuotes:Math.floor(Math.random()*100)+2,avgReplies:Math.floor(Math.random()*250)+8,avgBookmarks:Math.floor(Math.random()*500)+10});};
+function ConnectPage({ onBack }) {
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <Nav onHome={onBack} right={<span style={{fontSize:11,color:"rgba(255,255,255,0.3)"}}>One card per account</span>}/>
-      <div style={{maxWidth:620,margin:"0 auto",padding:"36px 20px"}}>
-        {step==="select"&&(<>
-          <h2 style={{fontSize:26,fontWeight:800,margin:"0 0 6px"}}>Connect Your 𝕏 Account</h2>
-          <p style={{color:"rgba(255,255,255,0.4)",margin:"0 0 10px",fontSize:13}}>One account · one card · locked forever.</p>
-          <div style={{padding:"9px 14px",borderRadius:8,background:"rgba(212,165,55,0.08)",border:"1px solid rgba(212,165,55,0.15)",fontSize:11,color:"#FBBF24",marginBottom:24,fontWeight:600}}>📡 Demo mode — in production this uses X OAuth + API v2 metric pull.</div>
-          <div style={{display:"flex",gap:9,marginBottom:err?8:22}}>
-            <input value={handle} onChange={e=>{setHandle(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&custom()} placeholder="Enter your @handle..." style={{flex:1,padding:"12px 15px",fontSize:13,borderRadius:9,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",color:"#fff",outline:"none",fontFamily:"monospace"}}/>
-            <button onClick={custom} style={{padding:"12px 20px",fontSize:12,fontWeight:700,borderRadius:9,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>Claim</button>
-          </div>
-          {err&&<div style={{fontSize:12,color:"#F87171",marginBottom:16,padding:"8px 12px",background:"rgba(239,68,68,0.08)",borderRadius:7,border:"1px solid rgba(239,68,68,0.15)"}}>{err}</div>}
-          <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",marginBottom:10,letterSpacing:1.2,textTransform:"uppercase"}}>Demo profiles</div>
-          <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            {MOCK_PROFILES.map(p=>{
-              const ovr=computeOVR(p),t=getTier(ovr),m=computeMetrics(p),isC=claimed.has(p.handle.toLowerCase());
-              return(<button key={p.handle} onClick={()=>!isC&&attempt(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",background:isC?"rgba(255,255,255,0.01)":"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:9,cursor:isC?"not-allowed":"pointer",color:"#fff",textAlign:"left",opacity:isC?0.45:1,width:"100%",transition:"all 0.2s"}}
-                onMouseEnter={e=>{if(!isC){e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.borderColor=`${t.border}44`;}}}
-                onMouseLeave={e=>{e.currentTarget.style.background=isC?"rgba(255,255,255,0.01)":"rgba(255,255,255,0.02)";e.currentTarget.style.borderColor="rgba(255,255,255,0.06)";}}>
-                <div style={{width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg,${t.border},${t.accent})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",flexShrink:0}}>{inits(p.displayName)}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:700,fontSize:13}}>{p.displayName}{p.verified&&<span style={{color:"#60A5FA",fontSize:10,marginLeft:4}}>✓</span>}</div>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontFamily:"monospace"}}>@{p.handle}</div>
-                </div>
-                <div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:12,fontWeight:700}}>{FMT(p.followers)}</div><div style={{fontSize:8,color:"rgba(255,255,255,0.3)"}}>followers</div></div>
-                <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.35)",minWidth:40,textAlign:"right"}}>{m.er.toFixed(1)}%</div>
-                <div style={{padding:"3px 8px",borderRadius:5,fontSize:9,fontWeight:700,background:`${t.border}1A`,color:isC?"rgba(255,255,255,0.3)":t.accent,border:`1px solid ${t.border}2A`,flexShrink:0}}>{isC?"Claimed":t.name}</div>
-              </button>);
-            })}
-          </div>
-        </>)}
-        {step==="loading"&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:340}}><div style={{width:46,height:46,borderRadius:"50%",border:"3px solid rgba(212,165,55,0.12)",borderTopColor:"#FBBF24",animation:"spin 1s linear infinite"}}/><p style={{marginTop:20,fontSize:14,fontWeight:600,color:"rgba(255,255,255,0.55)"}}>Pulling metrics for @{profile?.handle}…</p><p style={{fontSize:11,color:"rgba(255,255,255,0.3)"}}>Followers · ER · Virality · Listed count…</p></div>}
-        {step==="preview"&&profile&&(()=>{const m=computeMetrics(profile),ovr=computeOVR(profile),t=getTier(ovr);return(
-          <div style={{textAlign:"center"}}>
-            <h2 style={{fontSize:20,fontWeight:800,margin:"0 0 5px"}}>Stats Locked In</h2>
-            <p style={{color:"rgba(255,255,255,0.4)",margin:"0 0 22px",fontSize:13}}>Frozen at mint — your card reflects these metrics.</p>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9,background:"rgba(255,255,255,0.03)",borderRadius:12,padding:20,border:"1px solid rgba(255,255,255,0.05)",maxWidth:420,margin:"0 auto 20px"}}>
-              {[{l:"Followers",v:FMT(profile.followers)},{l:"Eng. Rate",v:m.er.toFixed(1)+"%"},{l:"Listed",v:FMT(profile.listedCount)},{l:"Virality",v:m.vir.toFixed(2)+"%"},{l:"Activity",v:m.freq.toFixed(1)+"/d"},{l:"OVR",v:ovr}].map(i=>(<div key={i.l}><div style={{fontSize:19,fontWeight:800,color:i.l==="OVR"?t.accent:"#fff"}}>{i.v}</div><div style={{fontSize:8,color:"rgba(255,255,255,0.32)",letterSpacing:1,textTransform:"uppercase"}}>{i.l}</div></div>))}
-            </div>
-            <div style={{display:"inline-block",padding:"4px 12px",borderRadius:6,background:`${t.border}20`,color:t.accent,border:`1px solid ${t.border}30`,fontSize:11,fontWeight:700,marginBottom:20}}>Projected Tier: {t.name}</div><br/>
-            <button onClick={()=>{SFX.click();onClaim(profile);}} style={{padding:"14px 42px",fontSize:14,fontWeight:700,color:"#1a1a1a",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,cursor:"pointer",boxShadow:"0 4px 16px rgba(212,165,55,0.28)"}}>Mint My CTWC Card</button>
-          </div>);})()}
+      <div style={{maxWidth:480,margin:"0 auto",padding:"80px 20px",textAlign:"center"}}>
+        <div style={{fontSize:52,marginBottom:20}}>𝕏</div>
+        <h2 style={{fontSize:28,fontWeight:800,margin:"0 0 10px"}}>Connect Your X Account</h2>
+        <p style={{color:"rgba(255,255,255,0.45)",margin:"0 0 40px",fontSize:14,lineHeight:1.6}}>
+          Sign in with X to claim your CTWC card.<br/>
+          Your real stats are pulled directly from your profile.<br/>
+          <strong style={{color:"rgba(255,255,255,0.7)"}}>One account · one card · locked forever.</strong>
+        </p>
+        <a href="/api/auth/twitter" style={{display:"inline-flex",alignItems:"center",gap:10,padding:"15px 36px",fontSize:15,fontWeight:700,color:"#fff",background:"#000",border:"2px solid rgba(255,255,255,0.15)",borderRadius:12,cursor:"pointer",textDecoration:"none",boxShadow:"0 4px 20px rgba(0,0,0,0.4)",transition:"all 0.2s"}}
+          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="#1a1a1a";(e.currentTarget as HTMLElement).style.borderColor="rgba(255,255,255,0.3)";}}
+          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="#000";(e.currentTarget as HTMLElement).style.borderColor="rgba(255,255,255,0.15)";}}>
+          <span style={{fontSize:20}}>𝕏</span> Sign in with X to Claim
+        </a>
+        <p style={{marginTop:24,fontSize:11,color:"rgba(255,255,255,0.2)"}}>
+          We only read your public profile — no posting, no DMs.
+        </p>
       </div>
     </div>
   );
@@ -1753,6 +1688,44 @@ export default function CTWCApp() {
 
   useEffect(() => { loadData(); }, []);
 
+  // ── Handle ?just_claimed=<handle> redirect from X OAuth ──────
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const justClaimed = params.get("just_claimed");
+    const oauthError  = params.get("error");
+
+    if (oauthError) {
+      const msgs: Record<string,string> = {
+        oauth_failed:   "OAuth failed — please try again.",
+        token_failed:   "Could not get access token — please try again.",
+        profile_failed: "Could not fetch your X profile — please try again.",
+        pool_full:      "The card pool is full (400/400). Registration is closed.",
+        no_user:        "X user not found.",
+      };
+      setMintError(msgs[oauthError] ?? "Something went wrong — please try again.");
+      window.history.replaceState({}, "", "/");
+      return;
+    }
+
+    if (justClaimed) {
+      // Card was minted by the OAuth callback — fetch it from Supabase
+      window.history.replaceState({}, "", "/");
+      (async () => {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("cards").select("*").eq("x_handle", justClaimed).single();
+        if (data) {
+          const card = transformCard(data);
+          setPending(card);
+          setMyCardId(card.id);
+          await loadData();
+          setPage("reveal");
+        }
+      })();
+    }
+  }, []);
+
   // ── Real-time: refresh when cards table changes ──────────────
   useEffect(() => {
     const channel = supabase
@@ -1867,7 +1840,7 @@ export default function CTWCApp() {
       )}
 
       {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams}/>}
-      {page==="connect"     && <ConnectPage onClaim={handleClaim} onBack={()=>setPage("landing")} claimed={claimed} loading={mintLoading}/>}
+      {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
       {page==="reveal"      && pending && (
         <div style={{minHeight:"100vh",background:"#070B14",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
           <CardReveal card={pending} onDone={afterReveal}/>
