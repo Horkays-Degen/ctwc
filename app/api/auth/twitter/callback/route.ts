@@ -70,21 +70,21 @@ export async function GET(req: NextRequest) {
   const handle   = (u.username ?? "").toLowerCase();
   console.log("[twitter/callback] user:", handle);
 
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error("[twitter/callback] SUPABASE_SERVICE_ROLE_KEY is not set in Vercel env vars!");
-    return NextResponse.redirect(`${appUrl}?error=mint_failed`);
+  const srkSet = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const sbUrl  = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").slice(8, 28); // partial for debug
+
+  if (!srkSet) {
+    return NextResponse.redirect(`${appUrl}?error=mint_failed&dbg=no_srk`);
   }
-  console.log("[twitter/callback] supabase url prefix:", (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").slice(0, 40));
 
   const supabase = createAdminClient();
 
   // ── If already claimed, just redirect back ───────────────────
-  const { data: existing } = await supabase
-    .from("cards").select("*").eq("x_handle", handle).single();
+  const { data: existing, error: selectErr } = await supabase
+    .from("cards").select("id").eq("x_handle", handle).single();
 
   if (existing) {
-    console.log("[twitter/callback] card already exists for", handle);
-    return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
+    return NextResponse.redirect(`${appUrl}?just_claimed=${handle}&dbg=existing`);
   }
 
   // ── Check pool limit ─────────────────────────────────────────
@@ -122,10 +122,9 @@ export async function GET(req: NextRequest) {
   }).select().single();
 
   if (insertErr || !newCard) {
-    console.error("[twitter/callback] insert failed:", insertErr);
-    return NextResponse.redirect(`${appUrl}?error=mint_failed`);
+    const detail = encodeURIComponent((insertErr?.message ?? "no_card").slice(0, 60));
+    return NextResponse.redirect(`${appUrl}?error=mint_failed&dbg=${detail}`);
   }
 
-  console.log("[twitter/callback] minted card for", handle, "id:", newCard.id);
-  return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
+  return NextResponse.redirect(`${appUrl}?just_claimed=${handle}&dbg=ok_${newCard.id.slice(0,8)}`);
 }
