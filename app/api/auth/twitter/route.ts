@@ -12,7 +12,11 @@ export async function GET(req: NextRequest) {
   // Generate PKCE pair
   const codeVerifier  = crypto.randomBytes(32).toString("base64url");
   const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
-  const state         = crypto.randomBytes(16).toString("hex");
+  const nonce         = crypto.randomBytes(8).toString("hex");
+
+  // Embed verifier in state so we don't depend on cookies across redirects
+  // Format: nonce|base64url(codeVerifier)
+  const state = `${nonce}|${codeVerifier}`;
 
   const params = new URLSearchParams({
     response_type:         "code",
@@ -24,14 +28,7 @@ export async function GET(req: NextRequest) {
     code_challenge_method: "S256",
   });
 
-  const res = NextResponse.redirect(
+  return NextResponse.redirect(
     `https://twitter.com/i/oauth2/authorize?${params.toString()}`
   );
-
-  // Store verifier + state in short-lived cookies
-  const cookieOpts = { httpOnly: true, secure: true, maxAge: 600, sameSite: "lax" } as const;
-  res.cookies.set("x_code_verifier", codeVerifier, cookieOpts);
-  res.cookies.set("x_oauth_state",   state,         cookieOpts);
-
-  return res;
 }

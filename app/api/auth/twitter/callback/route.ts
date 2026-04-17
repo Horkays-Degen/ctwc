@@ -10,13 +10,14 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get("state");
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://ctwc.vercel.app";
 
-  const storedState    = req.cookies.get("x_oauth_state")?.value;
-  const codeVerifier   = req.cookies.get("x_code_verifier")?.value;
-  const clientId       = process.env.X_CLIENT_ID!;
-  const clientSecret   = process.env.X_CLIENT_SECRET!;
+  const clientId     = process.env.X_CLIENT_ID!;
+  const clientSecret = process.env.X_CLIENT_SECRET!;
 
-  // Validate state + verifier
-  if (!code || !state || state !== storedState || !codeVerifier) {
+  // Extract codeVerifier from state (format: nonce|codeVerifier)
+  const parts        = (state ?? "").split("|");
+  const codeVerifier = parts.length === 2 ? parts[1] : null;
+
+  if (!code || !state || !codeVerifier) {
     return NextResponse.redirect(`${appUrl}?error=oauth_failed`);
   }
 
@@ -64,10 +65,7 @@ export async function GET(req: NextRequest) {
     .from("cards").select("*").eq("x_handle", handle).single();
 
   if (existing) {
-    const res = NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
-    res.cookies.delete("x_code_verifier");
-    res.cookies.delete("x_oauth_state");
-    return res;
+    return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
   }
 
   // ── Check pool limit ─────────────────────────────────────────
@@ -104,9 +102,5 @@ export async function GET(req: NextRequest) {
     ovr, tier, position, stats, badges,
   });
 
-  // ── Clear cookies + redirect back to app ────────────────────
-  const res = NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
-  res.cookies.delete("x_code_verifier");
-  res.cookies.delete("x_oauth_state");
-  return res;
+  return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
 }
