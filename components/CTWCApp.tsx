@@ -1702,7 +1702,9 @@ export default function CTWCApp() {
     const justClaimed = params.get("just_claimed");
     const oauthError  = params.get("error");
 
-    window.history.replaceState({}, "", "/");
+    if (justClaimed || oauthError) {
+      window.history.replaceState({}, "", "/");
+    }
 
     if (oauthError) {
       const msgs: Record<string,string> = {
@@ -1718,30 +1720,38 @@ export default function CTWCApp() {
     }
 
     // New mint takes priority; fall back to stored session
-    const handle = justClaimed || localStorage.getItem("ctwc_handle");
+    let handle: string | null = null;
+    try {
+      handle = justClaimed || localStorage.getItem("ctwc_handle");
+      if (justClaimed) localStorage.setItem("ctwc_handle", justClaimed);
+    } catch { /* localStorage blocked */ }
     if (!handle) return;
-    if (justClaimed) localStorage.setItem("ctwc_handle", justClaimed);
 
     (async () => {
-      const sb = createClient();
-      const { data } = await sb.from("cards").select("*").eq("x_handle", handle).single();
-      if (!data) {
-        localStorage.removeItem("ctwc_handle");
-        if (justClaimed) setMintError("Card not found — please try again.");
-        return;
-      }
-      const card = transformCard(data);
-      setMyHandle(handle);
-      setPending(card);
-      setMyCardId(card.id);
-      await loadData();
-      if (justClaimed) {
-        setPage("reveal");
-      } else if (data.team_id) {
-        setViewTeamId(data.team_id);
-        setPage("teamPage");
-      } else {
-        setPage("teamSetup");
+      try {
+        const sb = createClient();
+        const { data } = await sb.from("cards").select("*").eq("x_handle", handle).single();
+        if (!data) {
+          try { localStorage.removeItem("ctwc_handle"); } catch {}
+          if (justClaimed) setMintError("Card not found after minting — check Supabase insert policy.");
+          return;
+        }
+        const card = transformCard(data);
+        setMyHandle(handle);
+        setPending(card);
+        setMyCardId(card.id);
+        await loadData();
+        if (justClaimed) {
+          setPage("reveal");
+        } else if (data.team_id) {
+          setViewTeamId(data.team_id);
+          setPage("teamPage");
+        } else {
+          setPage("teamSetup");
+        }
+      } catch (err) {
+        console.error("Init effect error:", err);
+        setMintError("Something went wrong loading your session.");
       }
     })();
   }, []);
