@@ -17,10 +17,7 @@ export async function GET(req: NextRequest) {
   const parts        = (state ?? "").split("|");
   const codeVerifier = parts.length >= 2 ? parts.slice(1).join("|") : null;
 
-  console.log("[twitter/callback] code:", !!code, "state parts:", parts.length, "verifier:", !!codeVerifier);
-
   if (!code || !state || !codeVerifier) {
-    console.error("[twitter/callback] missing params — code:", code, "state:", state);
     return NextResponse.redirect(`${appUrl}?error=oauth_failed`);
   }
 
@@ -40,14 +37,11 @@ export async function GET(req: NextRequest) {
   });
 
   if (!tokenRes.ok) {
-    const body = await tokenRes.text();
-    console.error("[twitter/callback] token exchange failed:", tokenRes.status, body);
+    console.error("[twitter/callback] token exchange failed:", tokenRes.status, await tokenRes.text());
     return NextResponse.redirect(`${appUrl}?error=token_failed`);
   }
 
-  const tokenJson = await tokenRes.json();
-  const access_token = tokenJson.access_token;
-  console.log("[twitter/callback] token exchange OK, has token:", !!access_token);
+  const { access_token } = await tokenRes.json();
 
   // ── Fetch the authenticated user's own profile ───────────────
   const userRes = await fetch(
@@ -56,35 +50,22 @@ export async function GET(req: NextRequest) {
   );
 
   if (!userRes.ok) {
-    const body = await userRes.text();
-    console.error("[twitter/callback] profile fetch failed:", userRes.status, body);
+    console.error("[twitter/callback] profile fetch failed:", userRes.status);
     return NextResponse.redirect(`${appUrl}?error=profile_failed`);
   }
 
   const { data: u } = await userRes.json();
-  if (!u) {
-    console.error("[twitter/callback] no user in profile response");
-    return NextResponse.redirect(`${appUrl}?error=no_user`);
-  }
+  if (!u) return NextResponse.redirect(`${appUrl}?error=no_user`);
 
   const handle   = (u.username ?? "").toLowerCase();
-  console.log("[twitter/callback] user:", handle);
-
-  const srkSet = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const sbUrl  = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").slice(8, 28); // partial for debug
-
-  if (!srkSet) {
-    return NextResponse.redirect(`${appUrl}?error=mint_failed&dbg=no_srk`);
-  }
-
   const supabase = createAdminClient();
 
   // ── If already claimed, just redirect back ───────────────────
-  const { data: existing, error: selectErr } = await supabase
+  const { data: existing } = await supabase
     .from("cards").select("id").eq("x_handle", handle).single();
 
   if (existing) {
-    return NextResponse.redirect(`${appUrl}?just_claimed=${handle}&dbg=existing`);
+    return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
   }
 
   // ── Check pool limit ─────────────────────────────────────────
@@ -122,9 +103,9 @@ export async function GET(req: NextRequest) {
   }).select().single();
 
   if (insertErr || !newCard) {
-    const detail = encodeURIComponent((insertErr?.message ?? "no_card").slice(0, 60));
-    return NextResponse.redirect(`${appUrl}?error=mint_failed&dbg=${detail}`);
+    console.error("[twitter/callback] insert failed:", insertErr);
+    return NextResponse.redirect(`${appUrl}?error=mint_failed`);
   }
 
-  return NextResponse.redirect(`${appUrl}?just_claimed=${handle}&dbg=ok_${newCard.id.slice(0,8)}`);
+  return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);
 }

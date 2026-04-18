@@ -467,6 +467,7 @@ function ShieldCard({ card, size="large", onClick }) {
       <svg width={W} height={H} viewBox="0 0 340 490" style={{filter:`drop-shadow(0 0 ${isLg?22:10}px ${t.glow}) drop-shadow(0 8px 24px rgba(0,0,0,0.5))`}}>
         <defs>
           <clipPath id={`cl-${uid}`}><path d={SHIELD}/></clipPath>
+          <clipPath id={`av-${uid}`}><circle cx="170" cy="178" r="56"/></clipPath>
           <linearGradient id={`bg-${uid}`} x1="0" y1="0" x2="0.6" y2="1"><stop offset="0%" stopColor={t.bg}/><stop offset="100%" stopColor={t.bgDark}/></linearGradient>
           <radialGradient id={`hl-${uid}`} cx="50%" cy="30%" r="55%"><stop offset="0%" stopColor={t.accent} stopOpacity="0.18"/><stop offset="100%" stopColor="transparent"/></radialGradient>
           <linearGradient id={`br-${uid}`} x1="0" y1="0" x2="0.4" y2="1"><stop offset="0%" stopColor={t.accent}/><stop offset="40%" stopColor={t.border}/><stop offset="75%" stopColor={t.accent}/><stop offset="100%" stopColor={t.border} stopOpacity="0.5"/></linearGradient>
@@ -491,7 +492,10 @@ function ShieldCard({ card, size="large", onClick }) {
           {/* Avatar */}
           <circle cx="170" cy="178" r="64" fill={`${av}28`} stroke={t.border} strokeWidth="2" opacity="0.5"/>
           <circle cx="170" cy="178" r="56" fill={av}/>
-          <text x="170" y="196" fontSize="36" fontWeight="800" fill="#fff" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{ini}</text>
+          {card.avatarUrl
+            ? <image href={card.avatarUrl} x="114" y="122" width="112" height="112" clipPath={`url(#av-${uid})`} preserveAspectRatio="xMidYMid slice"/>
+            : <text x="170" y="196" fontSize="36" fontWeight="800" fill="#fff" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{ini}</text>
+          }
           {card.rawProfile?.verified&&<><circle cx="210" cy="218" r="10" fill="#1D4ED8"/><text x="210" y="222" fontSize="10" fill="#fff" textAnchor="middle" fontWeight="700">✓</text></>}
           {/* Name */}
           <text x="170" y="272" fontSize="22" fontWeight="800" fill="#fff" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{card.displayName}</text>
@@ -685,7 +689,7 @@ function PitchNode({ ps, card, isCapt, isSelected, captMode, onClick }) {
   const av=card?aColor(card.displayName):null;
   const t=card?.tier;
   return (
-    <g onClick={onClick} style={{cursor:captMode||!card?"pointer":"default"}}>
+    <g onClick={onClick} style={{cursor:card?"pointer":"default"}}>
       {isSelected&&<circle cx={x} cy={y} r={r+10} fill={t?.accent||"#fff"} opacity="0.2"/>}
       {isSelected&&<circle cx={x} cy={y} r={r+7}  fill="none" stroke={t?.accent||"#fff"} strokeWidth="2" opacity="0.8" strokeDasharray="4 2"/>}
       <circle cx={x} cy={y} r={r+2} fill="rgba(0,0,0,0.3)"/>
@@ -706,7 +710,7 @@ function PitchNode({ ps, card, isCapt, isSelected, captMode, onClick }) {
 }
 
 // ─── FOOTBALL PITCH ───────────────────────────────────────────
-function FootballPitch({ team, myCardId, onTeamUpdate }) {
+function FootballPitch({ team, myCardId, onTeamUpdate, onCardView }) {
   const [captMode,  setCaptMode]  = useState(false);
   const [selected,  setSelected]  = useState(null);
   const [swapMsg,   setSwapMsg]   = useState("");
@@ -716,8 +720,11 @@ function FootballPitch({ team, myCardId, onTeamUpdate }) {
   const filled    = team.slots.filter(s=>s.card).length;
 
   const handleNodeClick = (slotIdx) => {
-    if (!captMode) return;
     const slot = team.slots[slotIdx];
+    if (!captMode) {
+      if (slot.card) { SFX.click(); onCardView?.(slot.card); }
+      return;
+    }
     if (selected === null) {
       if (slot.card) { SFX.click(); setSelected(slotIdx); }
     } else {
@@ -1230,7 +1237,7 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
         <div style={{display:"flex",gap:24,flexWrap:"wrap",alignItems:"flex-start"}}>
           {/* Pitch */}
           <div style={{flex:"1 1 400px",minWidth:320}}>
-            <FootballPitch team={team} myCardId={myCardId} onTeamUpdate={onTeamUpdate}/>
+            <FootballPitch team={team} myCardId={myCardId} onTeamUpdate={onTeamUpdate} onCardView={setExpandCard}/>
           </div>
           {/* Roster */}
           <div style={{flex:"0 1 260px",minWidth:240}}>
@@ -1733,7 +1740,7 @@ export default function CTWCApp() {
         const { data } = await sb.from("cards").select("*").eq("x_handle", handle).single();
         if (!data) {
           try { localStorage.removeItem("ctwc_handle"); } catch {}
-          if (justClaimed) setMintError("Card not found after minting — check Supabase insert policy.");
+          if (justClaimed) setMintError("Card minting failed — please try again.");
           return;
         }
         const card = transformCard(data);
