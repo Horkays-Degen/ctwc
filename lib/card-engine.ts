@@ -1,19 +1,20 @@
-// ── Card stats engine — same logic as the original app ───────────
-// Takes raw X profile data, returns CTWC card stats + tier
+// ── CTWC Card Engine ─────────────────────────────────────────────
+// Calibrated for active CT participants, not mega-whales.
+// Realistic ceilings: 200k followers, 150k tweets, 10k listed, 15% eng rate.
 
 export type XProfile = {
-  x_handle: string;
-  display_name: string;
-  avatar_url: string;
-  followers: number;
-  following: number;
-  listed_count: number;
-  tweet_count: number;
-  verified: boolean;
-  // Optional tweet engagement metrics (fetched from user timeline)
-  avg_likes?: number;
-  avg_retweets?: number;
-  avg_replies?: number;
+  x_handle:        string;
+  display_name:    string;
+  avatar_url:      string;
+  followers:       number;
+  following:       number;
+  listed_count:    number;
+  tweet_count:     number;
+  verified:        boolean;
+  // Optional — fetched from user timeline on OAuth mint
+  avg_likes?:       number;
+  avg_retweets?:    number;
+  avg_replies?:     number;
   avg_impressions?: number;
 };
 
@@ -28,50 +29,97 @@ export type CardStats = {
 
 export type TierName = "CT Player" | "CT Star" | "CT Elite" | "CT Legend" | "Mythic";
 
-const clamp = (v: number, lo = 40, hi = 99) =>
-  Math.min(hi, Math.max(lo, Math.round(v)));
+// ── Helpers ───────────────────────────────────────────────────────
+const clamp  = (v: number, lo = 40, hi = 99) => Math.min(hi, Math.max(lo, Math.round(v)));
+// Logarithmic scale — compresses the long tail while keeping resolution at the low end
+const logNorm = (v: number, max: number) =>
+  clamp(Math.log1p(v) / Math.log1p(max) * 99);
 
-const normalize = (v: number, max: number, scale = 99) =>
-  clamp(Math.log1p(v) / Math.log1p(max) * scale);
+// ── Position assignment (stat-driven, deterministic per handle) ───
+function assignPosition(stats: CardStats, handle: string): string {
+  const { ENG, INF, CLT, VOL, VRL } = stats;
+  // Deterministic tie-breaker from handle chars so same user always gets same pos
+  const h = handle.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  const pick = (opts: string[]) => opts[h % opts.length];
 
-export function buildCard(profile: XProfile): { stats: CardStats; ovr: number; tier: TierName; badges: { label: string; color: string }[] } {
+  if (INF >= 82)                        return "GK";          // big accounts anchor the goal
+  if (ENG >= 78 && VOL >= 78)           return "ST";          // prolific + high engagement
+  if (VRL >= 78 && ENG >= 65)           return pick(["LW","RW"]);  // viral wings
+  if (ENG >= 72)                        return "CAM";         // creative, engaging
+  if (VOL >= 78 && CLT >= 60)           return "CDM";         // engine: high vol + clout
+  if (VOL >= 65 && ENG >= 55)           return "CM";          // versatile midfielder
+  if (CLT >= 68)                        return "CB";          // authoritative, well-listed
+  if (CLT >= 52)                        return pick(["LB","RB"]); // community connectors
+  return "CM";                                                 // default
+}
+
+// ── Main builder ──────────────────────────────────────────────────
+export function buildCard(profile: XProfile): {
+  stats: CardStats; ovr: number; tier: TierName;
+  badges: { label: string; color: string }[];
+  position: string;
+} {
   const { followers, following, listed_count, tweet_count, verified } = profile;
 
-  const ffRatio = following > 0 ? followers / following : followers;
+  const hasEng = (profile.avg_impressions ?? 0) > 0;
 
-  // If we have real tweet engagement data, use it; otherwise fall back to follower ratio
-  const hasEngData = profile.avg_impressions !== undefined && profile.avg_impressions > 0;
-  const engRate = hasEngData
-    ? ((profile.avg_likes! + profile.avg_retweets!) / profile.avg_impressions!) * 100
+  // ── INF: follower reach — ceiling 200k ───────────────────────
+  const INF = logNorm(followers, 200_000);
+
+  // ── CLT: listed count authority — ceiling 10k ────────────────
+  const CLT = logNorm(listed_count, 10_000);
+
+  // ── VOL: posting volume — ceiling 150k ───────────────────────
+  const VOL = logNorm(tweet_count, 150_000);
+
+  // ── ENG: engagement — real rate preferred, FF ratio fallback ─
+  // Real:     (likes + rts + replies) / impressions × 100, ceiling 15%
+  // Fallback: followers / following ratio, ceiling 200
+  const ffRatio = following > 0 ? followers / following : Math.min(followers, 200);
+  const engRate = hasEng
+    ? ((profile.avg_likes! + profile.avg_retweets! + (profile.avg_replies ?? 0))
+       / profile.avg_impressions!) * 100
     : 0;
+  const ENG = hasEng ? logNorm(engRate, 15) : logNorm(ffRatio, 200);
 
-  const ENG = hasEngData
-    ? normalize(engRate, 15)                          // real engagement rate %
-    : normalize(ffRatio, 50000);                      // fallback: FF ratio
-  const INF = normalize(followers,     5_000_000);
-  const CLT = normalize(listed_count,  50_000);
-  const VOL = normalize(tweet_count,   100_000);
-  const VRL = hasEngData
-    ? normalize((profile.avg_retweets! + (profile.avg_replies ?? 0)) * followers / 1000, 500_000)
-    : normalize(followers * (listed_count > 0 ? listed_count / 1000 : 1), 10_000_000);
+  // ── VRL: viral reach — real: rts×log(followers), fallback: followers×log(listed) ─
+  const VRL = hasEng
+    ? logNorm((profile.avg_retweets! + (profile.avg_replies ?? 0)) * Math.log1p(followers), 50_000)
+    : logNorm(followers * Math.log1p(listed_count + 1), 300_000);
 
-  const OVR = clamp(
-    Math.round(ENG * 0.20 + INF * 0.30 + CLT * 0.20 + VOL * 0.15 + VRL * 0.15)
+  // ── OVR — weighted blend ──────────────────────────────────────
+  let rawOvr = Math.round(
+    ENG * 0.25 +
+    INF * 0.25 +
+    CLT * 0.20 +
+    VOL * 0.15 +
+    VRL * 0.15,
   );
 
+  // Verified badge = +8 (meaningful but not game-breaking)
+  if (verified) rawOvr += 8;
+
+  const OVR = clamp(rawOvr);
+
+  // ── Stats object ─────────────────────────────────────────────
   const stats: CardStats = { ENG, INF, CLT, VOL, VRL, OVR };
 
+  // ── Tier ─────────────────────────────────────────────────────
   let tier: TierName = "CT Player";
-  if (OVR >= 95)      tier = "Mythic";
-  else if (OVR >= 88) tier = "CT Legend";
-  else if (OVR >= 78) tier = "CT Elite";
-  else if (OVR >= 65) tier = "CT Star";
+  if      (OVR >= 93) tier = "Mythic";
+  else if (OVR >= 83) tier = "CT Legend";
+  else if (OVR >= 73) tier = "CT Elite";
+  else if (OVR >= 60) tier = "CT Star";
 
+  // ── Position ─────────────────────────────────────────────────
+  const position = assignPosition(stats, profile.x_handle);
+
+  // ── Badges ───────────────────────────────────────────────────
   const badges: { label: string; color: string }[] = [];
-  if (verified)             badges.push({ label: "✓ Verified",       color: "#1DA1F2" });
-  if (followers > 100_000)  badges.push({ label: "100K+ Followers",  color: "#F59E0B" });
-  if (OVR >= 95)            badges.push({ label: "⚡ Mythic",         color: "#A855F7" });
-  if (hasEngData && engRate > 5) badges.push({ label: "🔥 High Eng.", color: "#EF4444" });
+  if (verified)               badges.push({ label: "✓ Verified",      color: "#1DA1F2" });
+  if (followers >= 100_000)   badges.push({ label: "100K+ Followers",  color: "#F59E0B" });
+  if (hasEng && engRate >= 5) badges.push({ label: "🔥 High Eng.",     color: "#EF4444" });
+  if (OVR >= 93)              badges.push({ label: "⚡ Mythic",         color: "#A855F7" });
 
-  return { stats, ovr: OVR, tier, badges };
+  return { stats, ovr: OVR, tier, badges, position };
 }

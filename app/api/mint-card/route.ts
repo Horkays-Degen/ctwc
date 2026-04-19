@@ -57,9 +57,7 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    const POSITIONS = ["GK","LB","CB","RB","CDM","CM","CAM","LW","ST","RW"];
-    const position = POSITIONS[Math.floor(Math.random() * POSITIONS.length)];
-    const { stats, ovr, tier, badges } = buildCard(profile);
+    const { stats, ovr, tier, badges, position } = buildCard(profile);
     const { data: card, error: insertErr } = await supabase.from("cards").insert({
       x_handle: profile.x_handle,
       display_name: profile.display_name,

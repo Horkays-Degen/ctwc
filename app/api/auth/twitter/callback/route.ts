@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-server";
 import { buildCard, XProfile } from "@/lib/card-engine";
 
-const POSITIONS = ["GK","LB","CB","RB","CDM","CM","CAM","LW","ST","RW"];
-
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const code  = searchParams.get("code");
@@ -111,8 +109,7 @@ export async function GET(req: NextRequest) {
     avg_impressions: avgImpressions,
   };
 
-  const { stats, ovr, tier, badges } = buildCard(profile);
-  const position = POSITIONS[Math.floor(Math.random() * POSITIONS.length)];
+  const { stats, ovr, tier, badges, position } = buildCard(profile);
 
   const { data: newCard, error: insertErr } = await supabase.from("cards").insert({
     x_handle:     profile.x_handle,

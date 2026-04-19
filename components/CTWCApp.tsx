@@ -315,91 +315,78 @@ const MOCK_PROFILES = [
   { handle:"ChainAnalyst", displayName:"Chain Analyst", followers:142000,  following:720,  tweetCount:8900,  listedCount:2100, accountAgeDays:3200, verified:true,  avgImpressions:55000,  avgLikes:2400, avgRetweets:890,  avgQuotes:210, avgReplies:540, avgBookmarks:920  },
 ];
 
-// ─── STAT ENGINE ─────────────────────────────────────────────
-function computeMetrics(p) {
-  const eng = p.avgLikes + p.avgRetweets + p.avgQuotes + p.avgReplies + p.avgBookmarks;
-  const er  = p.avgImpressions > 0 ? (eng / p.avgImpressions) * 100 : 0;
-  const vir = p.avgImpressions > 0 ? ((p.avgRetweets + p.avgQuotes) / p.avgImpressions) * 100 : 0;
-  const freq= p.tweetCount / Math.max(p.accountAgeDays, 1);
-  const ffr = p.following  > 0 ? p.followers / p.following : p.followers;
-  return { er, vir, freq, ffr, eng };
-}
-const norm  = (v,mn,mx) => Math.round(Math.min(99, Math.max(10, ((v-mn)/(mx-mn))*89+10)));
-const clamp = v => Math.round(Math.min(99, Math.max(10, v)));
-const jit   = () => (Math.random()*10)-5;
+// ─── STAT ENGINE (mirrors lib/card-engine.ts for mock preview cards) ──
+// Calibrated for active CT users: 200k followers, 150k tweets, 10k listed.
+const logNorm = (v, max) => Math.min(99, Math.max(40, Math.round(Math.log1p(v) / Math.log1p(max) * 99)));
 
-function computeOVR(p) {
-  const m  = computeMetrics(p);
-  const rs = norm(Math.log10(Math.max(p.followers,10)),1,7);
-  const es = norm(m.er,0,10);
-  const vs = norm(m.vir,0,3);
-  const as = norm(m.freq,0,30);
-  const ls = norm(Math.log10(Math.max(p.listedCount,1)),0,5);
-  let ovr  = Math.round(rs*0.30 + es*0.25 + vs*0.20 + as*0.15 + ls*0.10);
-  if (p.verified)              ovr = Math.min(99, ovr+8);
-  if (p.accountAgeDays > 1825) ovr = Math.min(99, ovr+4);
-  return clamp(ovr);
+function computeStats(p) {
+  const hasEng  = (p.avgImpressions ?? 0) > 0;
+  const ffRatio = p.following > 0 ? p.followers / p.following : Math.min(p.followers, 200);
+  const engRate = hasEng
+    ? ((p.avgLikes + p.avgRetweets + (p.avgReplies ?? 0)) / p.avgImpressions) * 100
+    : 0;
+  const INF = logNorm(p.followers,    200_000);
+  const CLT = logNorm(p.listedCount,  10_000);
+  const VOL = logNorm(p.tweetCount,   150_000);
+  const ENG = hasEng ? logNorm(engRate, 15) : logNorm(ffRatio, 200);
+  const VRL = hasEng
+    ? logNorm((p.avgRetweets + (p.avgReplies ?? 0)) * Math.log1p(p.followers), 50_000)
+    : logNorm(p.followers * Math.log1p(p.listedCount + 1), 300_000);
+  const rawOvr = Math.round(ENG*0.25 + INF*0.25 + CLT*0.20 + VOL*0.15 + VRL*0.15);
+  const OVR = Math.min(99, Math.max(40, rawOvr + (p.verified ? 8 : 0)));
+  return { ENG, INF, CLT, VOL, VRL, OVR };
 }
+
+function computeOVR(p) { return computeStats(p).OVR; }
 
 function getTier(ovr) {
-  if (ovr >= 95) return TIERS.MYTHIC;
-  if (ovr >= 88) return TIERS.CT_LEGEND;
-  if (ovr >= 78) return TIERS.CT_ELITE;
-  if (ovr >= 65) return TIERS.CT_STAR;
+  if (ovr >= 93) return TIERS.MYTHIC;
+  if (ovr >= 83) return TIERS.CT_LEGEND;
+  if (ovr >= 73) return TIERS.CT_ELITE;
+  if (ovr >= 60) return TIERS.CT_STAR;
   return TIERS.CT_PLAYER;
 }
 
-function computeStats(p, posCode) {
-  const m   = computeMetrics(p);
-  const cat = POSITIONS.find(x=>x.code===posCode)?.cat || "MID";
-  const reach= norm(Math.log10(Math.max(p.followers,10)),1,7);
-  const er   = norm(m.er,0,10);
-  const vir  = norm(m.vir,0,3);
-  const act  = norm(m.freq,0,30);
-  const auth = norm(Math.log10(Math.max(p.listedCount,1)),0,5);
-  const lon  = norm(p.accountAgeDays,0,4000);
-  const ffr  = norm(Math.min(m.ffr,5000),0,5000);
-  const likes= norm(Math.log10(Math.max(p.avgLikes,1)),0,5);
-  const impr = norm(Math.log10(Math.max(p.avgImpressions,1)),1,7);
-  const bkm  = norm(p.avgBookmarks,0,2000);
-
-  const PAC  = clamp((act*0.4 + impr*0.6) + jit());
-  const SHO  = clamp((likes*0.5 + er*0.5)  + jit());
-  const PAS  = clamp((vir*0.5 + norm(p.avgRetweets+p.avgQuotes,0,3000)*0.5) + jit());
-  const DRI  = clamp((bkm*0.6 + er*0.4)    + jit());
-  const DEF  = clamp((ffr*0.5 + norm(p.avgReplies,0,1000)*0.3 + lon*0.2) + jit());
-  const PHY  = clamp((lon*0.35+ auth*0.4 + norm(p.tweetCount,0,50000)*0.25) + jit());
-
-  const B = { GK:{PAC:-12,SHO:-8,PAS:0,DRI:0,DEF:15,PHY:12}, DEF:{PAC:-5,SHO:-12,PAS:-3,DRI:-5,DEF:18,PHY:10}, MID:{PAC:0,SHO:-3,PAS:15,DRI:8,DEF:0,PHY:-5}, FWD:{PAC:12,SHO:18,PAS:-3,DRI:10,DEF:-15,PHY:-3} }[cat]||{};
-  return { PAC:clamp(PAC+(B.PAC||0)), SHO:clamp(SHO+(B.SHO||0)), PAS:clamp(PAS+(B.PAS||0)), DRI:clamp(DRI+(B.DRI||0)), DEF:clamp(DEF+(B.DEF||0)), PHY:clamp(PHY+(B.PHY||0)) };
+function assignPosCode(stats, handle) {
+  const { ENG, INF, CLT, VOL, VRL } = stats;
+  const h    = (handle ?? "").split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  const pick = (opts) => opts[h % opts.length];
+  if (INF >= 82)                  return "GK";
+  if (ENG >= 78 && VOL >= 78)     return "ST";
+  if (VRL >= 78 && ENG >= 65)     return pick(["LW","RW"]);
+  if (ENG >= 72)                  return "CAM";
+  if (VOL >= 78 && CLT >= 60)     return "CDM";
+  if (VOL >= 65 && ENG >= 55)     return "CM";
+  if (CLT >= 68)                  return "CB";
+  if (CLT >= 52)                  return pick(["LB","RB"]);
+  return "CM";
 }
 
 function getBadges(p, ovr) {
-  const m=computeMetrics(p), badges=[];
-  if (p.verified) badges.push({label:"✓ Blue Check",color:"#60A5FA"});
-  if (p.accountAgeDays>1825 && p.listedCount>500) badges.push({label:"OG Legend",color:"#FBBF24"});
-  if (m.er>5)  badges.push({label:"Engagement King",color:"#A855F7"});
-  if (m.vir>1.5) badges.push({label:"Meme Lord",color:"#F87171"});
-  if (p.listedCount>2000) badges.push({label:"Top Authority",color:"#10B981"});
+  const badges = [];
+  if (p.verified)               badges.push({label:"✓ Verified",     color:"#1DA1F2"});
+  if (p.followers >= 100_000)   badges.push({label:"100K+ Followers",color:"#F59E0B"});
+  if (ovr >= 93)                badges.push({label:"⚡ Mythic",        color:"#A855F7"});
   return badges.slice(0,2);
 }
 
-function getWeightedPos() {
-  const total=POSITIONS.reduce((s,p)=>s+p.weight,0); let r=Math.random()*total;
-  for(const p of POSITIONS){ r-=p.weight; if(r<=0) return p; }
-  return POSITIONS[POSITIONS.length-1];
-}
-
-function createCard(profile, posCode) {
-  const pos  = posCode ? POSITIONS.find(p=>p.code===posCode)||getWeightedPos() : getWeightedPos();
-  const ovr  = computeOVR(profile);
-  const tier = getTier(ovr);
-  return { id:"CT-"+Math.random().toString(36).substring(2,8).toUpperCase(),
-    handle:profile.handle, displayName:profile.displayName,
-    position:pos, ovr, tier,
-    stats:computeStats(profile,pos.code),
-    badges:getBadges(profile,ovr),
-    rawProfile:profile };
+function createCard(profile, posCodeOverride?) {
+  const stats   = computeStats(profile);
+  const ovr     = stats.OVR;
+  const tier    = getTier(ovr);
+  const posCode = posCodeOverride ?? assignPosCode(stats, profile.handle);
+  const pos     = POSITIONS.find(p => p.code === posCode) ?? POSITIONS.find(p => p.code === "CM")!;
+  return {
+    id:          "CT-" + Math.random().toString(36).substring(2,8).toUpperCase(),
+    handle:      profile.handle,
+    displayName: profile.displayName,
+    avatarUrl:   profile.avatarUrl ?? "",
+    position:    pos,
+    ovr, tier,
+    stats,
+    badges:      getBadges(profile, ovr),
+    rawProfile:  profile,
+  };
 }
 
 function findBestSlot(slots, card) {
