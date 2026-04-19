@@ -159,20 +159,20 @@ const SFX = {
     };
     // Sustained cheer backdrop for all tiers
     this.crowd("cheer");
-    if (tierName === "Common") {
+    if (tierName === "CT Player") {
       note(880,  0,   1.0, "sine", 0.16);
       note(1320, 0.1, 0.8, "sine", 0.07);
-    } else if (tierName === "Rare") {
+    } else if (tierName === "CT Star") {
       note(440,  0,    1.2, "sine", 0.2);
       note(660,  0.15, 1.0, "sine", 0.2);
       note(880,  0.32, 0.9, "sine", 0.14);
-    } else if (tierName === "Epic") {
+    } else if (tierName === "CT Elite") {
       note(440,  0,    1.8, "sine",     0.2);
       note(554,  0,    1.8, "sine",     0.2);
       note(659,  0,    1.8, "sine",     0.2);
       note(880,  0.25, 1.4, "triangle", 0.1);
       note(1320, 0.48, 1.1, "triangle", 0.06);
-    } else if (tierName === "Legendary" || tierName === "Mythic") {
+    } else if (tierName === "CT Legend" || tierName === "Mythic") {
       // Thunderous bass drop
       note(55,   0,    1.0, "sine",     0.32);
       note(110,  0,    1.0, "sine",     0.26);
@@ -224,12 +224,13 @@ const SFX = {
   },
 };
 
-// ─── TIERS ───────────────────────────────────────────────────
+// ─── TIERS (names match card-engine tier strings stored in DB) ─
 const TIERS = {
-  COMMON:    { name:"Common",    border:"#7B8794", bg:"#3A3D44", bgDark:"#22242A", accent:"#9EA6B0", glow:"rgba(155,162,170,0.3)",  textColor:"#C4CAD2", minOvr:0  },
-  RARE:      { name:"Rare",      border:"#3B82F6", bg:"#152B52", bgDark:"#0A1628", accent:"#60A5FA", glow:"rgba(59,130,246,0.4)",   textColor:"#93C5FD", minOvr:60 },
-  EPIC:      { name:"Epic",      border:"#A855F7", bg:"#2D1250", bgDark:"#180828", accent:"#C084FC", glow:"rgba(168,85,247,0.45)",  textColor:"#D8B4FE", minOvr:75 },
-  LEGENDARY: { name:"Legendary", border:"#D4A537", bg:"#4A3410", bgDark:"#2A1D06", accent:"#FBBF24", glow:"rgba(212,165,55,0.55)",  textColor:"#FDE68A", minOvr:90 },
+  CT_PLAYER: { name:"CT Player", border:"#7B8794", bg:"#3A3D44", bgDark:"#22242A", accent:"#9EA6B0", glow:"rgba(155,162,170,0.3)",  textColor:"#C4CAD2" },
+  CT_STAR:   { name:"CT Star",   border:"#3B82F6", bg:"#152B52", bgDark:"#0A1628", accent:"#60A5FA", glow:"rgba(59,130,246,0.4)",   textColor:"#93C5FD" },
+  CT_ELITE:  { name:"CT Elite",  border:"#A855F7", bg:"#2D1250", bgDark:"#180828", accent:"#C084FC", glow:"rgba(168,85,247,0.45)",  textColor:"#D8B4FE" },
+  CT_LEGEND: { name:"CT Legend", border:"#D4A537", bg:"#4A3410", bgDark:"#2A1D06", accent:"#FBBF24", glow:"rgba(212,165,55,0.55)",  textColor:"#FDE68A" },
+  MYTHIC:    { name:"Mythic",    border:"#EF4444", bg:"#3D0A0A", bgDark:"#1A0505", accent:"#F87171", glow:"rgba(239,68,68,0.55)",   textColor:"#FCA5A5" },
 };
 
 // ─── POSITIONS ───────────────────────────────────────────────
@@ -341,10 +342,11 @@ function computeOVR(p) {
 }
 
 function getTier(ovr) {
-  if (ovr >= 90) return TIERS.LEGENDARY;
-  if (ovr >= 75) return TIERS.EPIC;
-  if (ovr >= 60) return TIERS.RARE;
-  return TIERS.COMMON;
+  if (ovr >= 95) return TIERS.MYTHIC;
+  if (ovr >= 88) return TIERS.CT_LEGEND;
+  if (ovr >= 78) return TIERS.CT_ELITE;
+  if (ovr >= 65) return TIERS.CT_STAR;
+  return TIERS.CT_PLAYER;
 }
 
 function computeStats(p, posCode) {
@@ -457,94 +459,169 @@ const aColor= n => ACOLORS[n.charCodeAt(0)%ACOLORS.length];
 const inits = n => n.split(" ").map(w=>w[0]).join("").substring(0,2).toUpperCase();
 
 // ─── SHIELD CARD ─────────────────────────────────────────────
+// FIFA-style stat definitions — map CT stats to FC labels with tooltips
+const STAT_DEFS = [
+  { k:"PAC", stat:"VOL", tip:"Volume — tweet pace & posting activity" },
+  { k:"SHO", stat:"ENG", tip:"Engagement — follower / following ratio" },
+  { k:"PAS", stat:"VRL", tip:"Viral reach — content spread & sharing" },
+  { k:"DRI", stat:"INF", tip:"Influence — raw follower count" },
+  { k:"DEF", stat:"CLT", tip:"Clout — listed count & perceived authority" },
+];
+
 function ShieldCard({ card, size="large", onClick }) {
-  const t=card.tier, isLg=size==="large";
-  const W=isLg?340:200, H=isLg?490:289;
-  const sk=Object.keys(card.stats);
-  const av=aColor(card.displayName), ini=inits(card.displayName);
-  const uid=card.id.replace(/[^a-z0-9]/gi,"");
-  const m=computeMetrics(card.rawProfile||{avgImpressions:1,followers:1000,following:100,avgLikes:10,avgRetweets:2,avgQuotes:1,avgReplies:3,avgBookmarks:2,tweetCount:100,listedCount:10,accountAgeDays:365,verified:false});
-  const SHIELD="M170 8 C228 8 278 12 318 28 C330 33 336 43 336 56 L336 338 C336 368 323 392 298 412 L183 478 C178 481 162 481 157 478 L42 412 C17 392 4 368 4 338 L4 56 C4 43 10 33 22 28 C62 12 112 8 170 8Z";
-  const INNER="M170 18 C224 18 272 22 310 36 C320 41 326 49 326 60 L326 334 C326 362 314 384 291 403 L181 465 C177 467 163 467 159 465 L49 403 C26 384 14 362 14 334 L14 60 C14 49 20 41 30 36 C68 22 116 18 170 18Z";
+  const [hovStat, setHovStat] = useState<string|null>(null);
+  const t = card.tier;
+  const isLg = size === "large";
+  const W = isLg ? 280 : 175;
+  const H = isLg ? 400 : 250;
+  const s = isLg ? 1 : 0.625; // scale factor
+
   return (
-    <div onClick={onClick} style={{cursor:onClick?"pointer":"default",display:"inline-block",transition:"transform 0.25s"}}
-      onMouseEnter={e=>{if(onClick)e.currentTarget.style.transform="scale(1.04)";}}
-      onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";}}>
-      <svg width={W} height={H} viewBox="0 0 340 490" style={{filter:`drop-shadow(0 0 ${isLg?22:10}px ${t.glow}) drop-shadow(0 8px 24px rgba(0,0,0,0.5))`}}>
-        <defs>
-          <clipPath id={`cl-${uid}`}><path d={SHIELD}/></clipPath>
-          <clipPath id={`av-${uid}`}><circle cx="170" cy="178" r="56"/></clipPath>
-          <linearGradient id={`bg-${uid}`} x1="0" y1="0" x2="0.6" y2="1"><stop offset="0%" stopColor={t.bg}/><stop offset="100%" stopColor={t.bgDark}/></linearGradient>
-          <radialGradient id={`hl-${uid}`} cx="50%" cy="30%" r="55%"><stop offset="0%" stopColor={t.accent} stopOpacity="0.18"/><stop offset="100%" stopColor="transparent"/></radialGradient>
-          <linearGradient id={`br-${uid}`} x1="0" y1="0" x2="0.4" y2="1"><stop offset="0%" stopColor={t.accent}/><stop offset="40%" stopColor={t.border}/><stop offset="75%" stopColor={t.accent}/><stop offset="100%" stopColor={t.border} stopOpacity="0.5"/></linearGradient>
-          <pattern id={`pt-${uid}`} x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
-            <polygon points="40,0 80,28 65,72 15,72 0,28" fill="none" stroke={t.accent} strokeWidth="0.4" opacity="0.12"/>
-          </pattern>
-        </defs>
-        <g clipPath={`url(#cl-${uid})`}>
-          <rect width="340" height="490" fill={`url(#bg-${uid})`}/>
-          <rect width="340" height="490" fill={`url(#pt-${uid})`}/>
-          <rect width="340" height="490" fill={`url(#hl-${uid})`}/>
-          <polygon points="170,55 240,145 205,255 135,255 100,145" fill={t.accent} opacity="0.04"/>
-          <polygon points="170,72 225,148 196,238 144,238 115,148" fill={t.accent} opacity="0.055"/>
-          <line x1="28" y1="308" x2="312" y2="308" stroke={t.border} strokeWidth="1" opacity="0.25"/>
-          <line x1="48" y1="375" x2="292" y2="375" stroke={t.border} strokeWidth="0.6" opacity="0.15"/>
-          {/* OVR + pos */}
-          <text x="46" y="72" fontSize="50" fontWeight="900" fill={t.textColor} fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{card.ovr}</text>
-          <text x="46" y="94" fontSize="16" fontWeight="700" fill={t.textColor} opacity="0.85" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{card.position.code}</text>
-          {/* Tier */}
-          <text x="294" y="56" fontSize="10" fontWeight="700" fill={t.textColor} opacity="0.5" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle" letterSpacing="2">{t.name.toUpperCase()}</text>
-          <text x="294" y="70" fontSize="7.5" fill={t.textColor} opacity="0.28" fontFamily="monospace" textAnchor="middle">{card.id}</text>
+    <div
+      onClick={onClick}
+      onMouseEnter={e => { if (onClick) (e.currentTarget as HTMLDivElement).style.transform = "scale(1.04)"; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = "scale(1)"; }}
+      style={{
+        width: W, height: H, flexShrink: 0, position: "relative", overflow: "hidden",
+        borderRadius: Math.round(14*s), cursor: onClick ? "pointer" : "default",
+        background: `linear-gradient(160deg, ${t.bg} 0%, ${t.bgDark} 100%)`,
+        border: `${Math.max(1, Math.round(2*s))}px solid ${t.border}`,
+        boxShadow: `0 0 ${Math.round(28*s)}px ${t.glow}, 0 8px 28px rgba(0,0,0,0.7)`,
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        transition: "transform 0.2s",
+        userSelect: "none",
+        display: "flex", flexDirection: "column",
+      }}>
+      {/* Ambient glow overlay */}
+      <div style={{position:"absolute",inset:0,background:`radial-gradient(ellipse at 65% 18%, ${t.accent}20, transparent 58%)`,pointerEvents:"none",zIndex:0}}/>
+
+      {/* Tier header strip */}
+      <div style={{
+        background:`linear-gradient(90deg, ${t.border}, ${t.accent}cc)`,
+        padding:`${Math.round(4*s)}px ${Math.round(10*s)}px`,
+        display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:1,
+      }}>
+        <span style={{fontSize:Math.round(8*s),fontWeight:800,letterSpacing:Math.round(2*s),color:t.bgDark,textTransform:"uppercase"}}>{t.name}</span>
+        <span style={{fontSize:Math.round(7*s),color:t.bgDark,opacity:0.65,fontFamily:"monospace"}}>CTWC 2026</span>
+      </div>
+
+      {/* Body */}
+      <div style={{padding:`${Math.round(8*s)}px ${Math.round(12*s)}px`,flex:1,display:"flex",flexDirection:"column",zIndex:1}}>
+
+        {/* OVR + avatar row */}
+        <div style={{display:"flex",alignItems:"flex-start",gap:Math.round(8*s)}}>
+          {/* OVR + position */}
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",minWidth:Math.round(52*s)}}>
+            <span style={{fontSize:Math.round(50*s),fontWeight:900,color:t.textColor,lineHeight:0.88,letterSpacing:-1}}>{card.ovr}</span>
+            <span style={{fontSize:Math.round(13*s),fontWeight:700,color:t.textColor,opacity:0.8,marginTop:Math.round(3*s)}}>{card.position?.code ?? "MID"}</span>
+            {card.rawProfile?.verified && (
+              <div style={{marginTop:Math.round(5*s),background:"#1D9BF0",borderRadius:Math.round(3*s),padding:`${Math.round(1*s)}px ${Math.round(5*s)}px`,fontSize:Math.round(7*s),fontWeight:800,color:"#fff"}}>✓</div>
+            )}
+          </div>
           {/* Avatar */}
-          <circle cx="170" cy="178" r="64" fill={`${av}28`} stroke={t.border} strokeWidth="2" opacity="0.5"/>
-          <circle cx="170" cy="178" r="56" fill={av}/>
-          {card.avatarUrl
-            ? <image href={card.avatarUrl} x="114" y="122" width="112" height="112" clipPath={`url(#av-${uid})`} preserveAspectRatio="xMidYMid slice"/>
-            : <text x="170" y="196" fontSize="36" fontWeight="800" fill="#fff" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{ini}</text>
-          }
-          {card.rawProfile?.verified&&<><circle cx="210" cy="218" r="10" fill="#1D4ED8"/><text x="210" y="222" fontSize="10" fill="#fff" textAnchor="middle" fontWeight="700">✓</text></>}
-          {/* Name */}
-          <text x="170" y="272" fontSize="22" fontWeight="800" fill="#fff" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{card.displayName}</text>
-          <text x="170" y="291" fontSize="11" fill={t.textColor} opacity="0.5" fontFamily="monospace" textAnchor="middle">@{card.handle}</text>
-          {card.badges?.slice(0,1).map((b,i)=>(
-            <g key={i}><rect x="110" y="297" width="120" height="16" rx="5" fill={b.color} opacity="0.18"/>
-            <text x="170" y="309" fontSize="9" fontWeight="700" fill={b.color} fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{b.label}</text></g>
-          ))}
-          {/* Stats */}
-          {sk.map((k,i)=>{const xp=37+i*53; return(
-            <g key={k}>
-              <text x={xp} y="336" fontSize="10" fontWeight="600" fill={t.textColor} opacity="0.5" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle" letterSpacing="1.2">{k}</text>
-              <text x={xp} y="360" fontSize="22" fontWeight="800" fill="#fff" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{card.stats[k]}</text>
-            </g>);})}
-          {/* Bottom strip */}
-          <rect x="42" y="382" width="256" height="52" rx="8" fill="rgba(0,0,0,0.3)"/>
-          {[{v:FMT(card.rawProfile?.followers||0),l:"Followers",x:95},{v:(m.er.toFixed(1))+"%",l:"Eng.Rate",x:170},{v:FMT(card.rawProfile?.listedCount||0),l:"Listed",x:245}].map(it=>(
-            <g key={it.l}><text x={it.x} y="402" fontSize="14" fontWeight="800" fill="#fff" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{it.v}</text>
-            <text x={it.x} y="417" fontSize="7.5" fontWeight="600" fill={t.textColor} opacity="0.4" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle" letterSpacing="1">{it.l.toUpperCase()}</text></g>
-          ))}
-          <text x="170" y="471" fontSize="9" fontWeight="700" fill={t.textColor} opacity="0.18" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle" letterSpacing="3.5">CTWC 2026</text>
-        </g>
-        <path d={SHIELD} fill="none" stroke={`url(#br-${uid})`} strokeWidth="3.5"/>
-        <path d={INNER}  fill="none" stroke={t.border} strokeWidth="0.7" opacity="0.28"/>
-        {t.name==="Legendary"&&(<g clipPath={`url(#cl-${uid})`}><rect y="0" width="60" height="490" fill="rgba(255,255,255,0.08)" opacity="0.7"><animate attributeName="x" from="-60" to="400" dur="3s" repeatCount="indefinite"/></rect></g>)}
-      </svg>
+          <div style={{flex:1,display:"flex",justifyContent:"center",alignItems:"center",paddingTop:Math.round(4*s)}}>
+            {card.avatarUrl ? (
+              <img src={card.avatarUrl} alt={card.displayName} style={{
+                width:Math.round(98*s),height:Math.round(98*s),borderRadius:"50%",objectFit:"cover",
+                border:`${Math.round(3*s)}px solid ${t.border}`,
+                boxShadow:`0 0 ${Math.round(20*s)}px ${t.glow}`,
+              }}/>
+            ) : (
+              <div style={{
+                width:Math.round(98*s),height:Math.round(98*s),borderRadius:"50%",
+                background:aColor(card.displayName),
+                border:`${Math.round(3*s)}px solid ${t.border}`,
+                boxShadow:`0 0 ${Math.round(20*s)}px ${t.glow}`,
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:Math.round(30*s),fontWeight:800,color:"#fff",
+              }}>{inits(card.displayName)}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{height:1,background:`${t.border}50`,margin:`${Math.round(8*s)}px 0 ${Math.round(5*s)}px`}}/>
+
+        {/* Name */}
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:Math.round(15*s),fontWeight:800,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{card.displayName}</div>
+          <div style={{fontSize:Math.round(10*s),color:t.textColor,opacity:0.4,fontFamily:"monospace",marginTop:1}}>@{card.handle}</div>
+        </div>
+
+        {/* Badges */}
+        {isLg && card.badges?.length > 0 && (
+          <div style={{display:"flex",justifyContent:"center",gap:5,marginTop:5,flexWrap:"wrap"}}>
+            {card.badges.slice(0,2).map((b,i)=>(
+              <span key={i} style={{fontSize:8,fontWeight:700,color:b.color,padding:"2px 7px",borderRadius:4,background:`${b.color}18`,border:`1px solid ${b.color}40`}}>{b.label}</span>
+            ))}
+          </div>
+        )}
+
+        {/* Spacer */}
+        <div style={{flex:1}}/>
+
+        {/* Stats — FIFA FC style */}
+        <div style={{borderTop:`1px solid ${t.border}40`,paddingTop:Math.round(8*s),display:"flex",justifyContent:"space-around"}}>
+          {STAT_DEFS.map(sd => {
+            const val = card.stats?.[sd.stat] ?? 60;
+            return (
+              <div key={sd.k} style={{textAlign:"center",position:"relative"}}
+                onMouseEnter={()=>isLg&&setHovStat(sd.k)}
+                onMouseLeave={()=>setHovStat(null)}>
+                {/* Tooltip */}
+                {hovStat===sd.k && (
+                  <div style={{
+                    position:"absolute",bottom:"calc(100% + 6px)",left:"50%",transform:"translateX(-50%)",
+                    background:"rgba(0,0,0,0.94)",border:`1px solid ${t.border}70`,
+                    color:"#fff",fontSize:9,padding:"5px 9px",borderRadius:5,
+                    whiteSpace:"nowrap",zIndex:200,boxShadow:"0 4px 16px rgba(0,0,0,0.7)",
+                    pointerEvents:"none",
+                  }}>
+                    <span style={{color:t.accent,fontWeight:700}}>{sd.k}</span>{" — "}{sd.tip}
+                  </div>
+                )}
+                <div style={{fontSize:Math.round(9*s),color:t.textColor,opacity:0.55,fontWeight:700,letterSpacing:0.8}}>{sd.k}</div>
+                <div style={{fontSize:Math.round(20*s),fontWeight:800,color:"#fff",lineHeight:1.1}}>{val}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div style={{textAlign:"center",marginTop:Math.round(4*s)}}>
+          <span style={{fontSize:Math.round(7*s),color:t.textColor,opacity:0.18,letterSpacing:3,fontWeight:700,textTransform:"uppercase"}}>Crypto Twitter World Cup</span>
+        </div>
+      </div>
+
+      {/* CT Legend shimmer sweep */}
+      {(t.name==="CT Legend"||t.name==="Mythic") && (
+        <div style={{
+          position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden",borderRadius:Math.round(14*s),
+        }}>
+          <div style={{
+            position:"absolute",top:0,left:"-100%",width:"60%",height:"100%",
+            background:"linear-gradient(105deg,transparent 20%,rgba(255,255,255,0.07) 50%,transparent 80%)",
+            animation:"shimmer 3s infinite linear",
+          }}/>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── CARD REVEAL — FIFA PACK OPENING ─────────────────────────
 const TIER_BADGES = {
-  Common:    { icon:"⚽", label:"CT PLAYER",  bg:"#3A3D44", text:"#7B8794" },
-  Rare:      { icon:"🌊", label:"CT STAR",    bg:"#152B52", text:"#3B82F6" },
-  Epic:      { icon:"⚡", label:"CT ELITE",   bg:"#2D1250", text:"#A855F7" },
-  Legendary: { icon:"👑", label:"CT LEGEND",  bg:"#4A3410", text:"#D4A537" },
-  Mythic:    { icon:"🔥", label:"CT MYTHIC",  bg:"#3D0A0A", text:"#EF4444" },
+  "CT Player": { icon:"⚽", label:"CT PLAYER",  bg:"#3A3D44", text:"#7B8794" },
+  "CT Star":   { icon:"🌊", label:"CT STAR",    bg:"#152B52", text:"#3B82F6" },
+  "CT Elite":  { icon:"⚡", label:"CT ELITE",   bg:"#2D1250", text:"#A855F7" },
+  "CT Legend": { icon:"👑", label:"CT LEGEND",  bg:"#4A3410", text:"#D4A537" },
+  "Mythic":    { icon:"🔥", label:"CT MYTHIC",  bg:"#3D0A0A", text:"#EF4444" },
 };
 
 function CardReveal({ card, onDone }) {
   const [phase, setPhase] = useState("pack"); // pack → rip → reveal → done
   const t = card.tier;
-  const badge = TIER_BADGES[t.name] || TIER_BADGES.Common;
+  const badge = TIER_BADGES[t.name] || TIER_BADGES["CT Player"];
 
   // Confetti particles seeded once
   const confetti = useRef(Array.from({length:50},(_,i)=>({
@@ -869,7 +946,7 @@ function Nav({ onHome, right }) {
 }
 
 // ─── LANDING ──────────────────────────────────────────────────
-function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard, onMyTeam }) {
+function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard, onMyTeam, sessionLoading }) {
   const [hov, setHov] = useState(false);
   const preview = useRef([createCard(MOCK_PROFILES[1],"ST"), createCard(MOCK_PROFILES[7],"CM")]).current;
   const totalSigned = teams.reduce((s,t)=>s+t.memberIds.length,0);
@@ -898,7 +975,12 @@ function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard
             <div style={{display:"inline-block",padding:"5px 13px",borderRadius:20,background:"rgba(212,165,55,0.1)",border:"1px solid rgba(212,165,55,0.18)",fontSize:10,fontWeight:700,color:"#FBBF24",marginBottom:20,letterSpacing:1.5}}>SEASON 1 — REGISTRATION OPEN</div>
             <h1 style={{fontSize:46,fontWeight:900,lineHeight:1.07,margin:0,letterSpacing:-1}}>Crypto Twitter.<br/><span style={{background:"linear-gradient(90deg,#FBBF24,#D4A537,#F59E0B)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>World Cup Cards.</span></h1>
             <p style={{fontSize:15,color:"rgba(255,255,255,0.48)",lineHeight:1.68,margin:"20px 0 30px",maxWidth:410}}>Claim your card. Join one of 32 teams. 400 spots total. Tournament kicks off when registration closes.</p>
-            {myCard ? (
+            {sessionLoading ? (
+              <button disabled style={{padding:"14px 32px",fontSize:14,fontWeight:700,color:"rgba(26,26,26,0.6)",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,cursor:"default",opacity:0.7,display:"flex",alignItems:"center",gap:9}}>
+                <span style={{width:14,height:14,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:"#1a1a1a",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>
+                Loading session...
+              </button>
+            ) : myCard ? (
               <button onClick={()=>{SFX.click();onMyTeam();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)} style={{padding:"14px 32px",fontSize:14,fontWeight:700,color:"#1a1a1a",background:hov?"linear-gradient(135deg,#F59E0B,#D4A537)":"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,cursor:"pointer",boxShadow:hov?"0 0 26px rgba(212,165,55,0.45)":"0 4px 14px rgba(212,165,55,0.22)",transition:"all 0.3s",display:"flex",alignItems:"center",gap:9}}>
                 ⚽ Go to My Team — OVR {myCard.ovr}
               </button>
@@ -1275,7 +1357,7 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
 // ─── PLAYER POOL ─────────────────────────────────────────────
 function PlayerPool({ pool, onBack, onClaim }) {
   const [filter,setFilter]=useState("All"), [selected,setSelected]=useState(null);
-  const tierNames=["All","Legendary","Epic","Rare","Common"];
+  const tierNames=["All","Mythic","CT Legend","CT Elite","CT Star","CT Player"];
   const visible=filter==="All"?pool:pool.filter(c=>c.tier.name===filter);
   const counts={};Object.values(TIERS).forEach(t=>{counts[t.name]=pool.filter(c=>c.tier.name===t.name).length;});
   return (
@@ -1689,6 +1771,10 @@ export default function CTWCApp() {
   const [mintLoading,setMintLoading]= useState(false);
   const [mintError,  setMintError]  = useState<string|null>(null);
   const [myHandle,   setMyHandle]   = useState<string|null>(null);
+  const [sessionLoading, setSessionLoading] = useState<boolean>(() => {
+    try { return typeof window !== "undefined" && !!localStorage.getItem("ctwc_handle"); }
+    catch { return false; }
+  });
 
   const supabase = createClient();
 
@@ -1765,6 +1851,8 @@ export default function CTWCApp() {
       } catch (err) {
         console.error("Init effect error:", err);
         setMintError("Something went wrong loading your session.");
+      } finally {
+        setSessionLoading(false);
       }
     })();
   }, []);
@@ -1868,6 +1956,7 @@ export default function CTWCApp() {
         @keyframes badgeDrop { 0%{transform:translateY(-60px) scale(0.5);opacity:0} 100%{transform:translateY(0) scale(1);opacity:1} }
         @keyframes confettiBurst { 0%{transform:translate(-50%,-50%) rotate(0deg);opacity:1} 100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) rotate(var(--rot));opacity:0} }
         @keyframes shimmerSweep { 0%{left:-60px} 100%{left:260px} }
+        @keyframes shimmer { 0%{left:-100%} 100%{left:200%} }
         *{box-sizing:border-box;margin:0;padding:0}
         body{background:#070B14;overflow-x:hidden}
         input::placeholder{color:rgba(255,255,255,0.22)}
@@ -1882,7 +1971,7 @@ export default function CTWCApp() {
         </div>
       )}
 
-      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams} myCard={pending} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
+      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
       {page==="reveal"      && pending && (
         <div style={{minHeight:"100vh",background:"#070B14",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>

@@ -10,6 +10,11 @@ export type XProfile = {
   listed_count: number;
   tweet_count: number;
   verified: boolean;
+  // Optional tweet engagement metrics (fetched from user timeline)
+  avg_likes?: number;
+  avg_retweets?: number;
+  avg_replies?: number;
+  avg_impressions?: number;
 };
 
 export type CardStats = {
@@ -34,11 +39,21 @@ export function buildCard(profile: XProfile): { stats: CardStats; ovr: number; t
 
   const ffRatio = following > 0 ? followers / following : followers;
 
-  const ENG = normalize(ffRatio,       50000);
+  // If we have real tweet engagement data, use it; otherwise fall back to follower ratio
+  const hasEngData = profile.avg_impressions !== undefined && profile.avg_impressions > 0;
+  const engRate = hasEngData
+    ? ((profile.avg_likes! + profile.avg_retweets!) / profile.avg_impressions!) * 100
+    : 0;
+
+  const ENG = hasEngData
+    ? normalize(engRate, 15)                          // real engagement rate %
+    : normalize(ffRatio, 50000);                      // fallback: FF ratio
   const INF = normalize(followers,     5_000_000);
   const CLT = normalize(listed_count,  50_000);
   const VOL = normalize(tweet_count,   100_000);
-  const VRL = normalize(followers * (listed_count > 0 ? listed_count / 1000 : 1), 10_000_000);
+  const VRL = hasEngData
+    ? normalize((profile.avg_retweets! + (profile.avg_replies ?? 0)) * followers / 1000, 500_000)
+    : normalize(followers * (listed_count > 0 ? listed_count / 1000 : 1), 10_000_000);
 
   const OVR = clamp(
     Math.round(ENG * 0.20 + INF * 0.30 + CLT * 0.20 + VOL * 0.15 + VRL * 0.15)
@@ -46,7 +61,6 @@ export function buildCard(profile: XProfile): { stats: CardStats; ovr: number; t
 
   const stats: CardStats = { ENG, INF, CLT, VOL, VRL, OVR };
 
-  // Tier thresholds
   let tier: TierName = "CT Player";
   if (OVR >= 95)      tier = "Mythic";
   else if (OVR >= 88) tier = "CT Legend";
@@ -54,9 +68,10 @@ export function buildCard(profile: XProfile): { stats: CardStats; ovr: number; t
   else if (OVR >= 65) tier = "CT Star";
 
   const badges: { label: string; color: string }[] = [];
-  if (verified)          badges.push({ label: "✓ Verified",    color: "#1DA1F2" });
-  if (followers > 100_000) badges.push({ label: "100K+ Followers", color: "#F59E0B" });
-  if (OVR >= 95)         badges.push({ label: "⚡ Mythic",      color: "#A855F7" });
+  if (verified)             badges.push({ label: "✓ Verified",       color: "#1DA1F2" });
+  if (followers > 100_000)  badges.push({ label: "100K+ Followers",  color: "#F59E0B" });
+  if (OVR >= 95)            badges.push({ label: "⚡ Mythic",         color: "#A855F7" });
+  if (hasEngData && engRate > 5) badges.push({ label: "🔥 High Eng.", color: "#EF4444" });
 
   return { stats, ovr: OVR, tier, badges };
 }
