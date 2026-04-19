@@ -460,18 +460,51 @@ const inits = n => n.split(" ").map(w=>w[0]).join("").substring(0,2).toUpperCase
 
 // ─── SHIELD CARD ─────────────────────────────────────────────
 // FIFA-style stat definitions — map CT stats to FC labels with tooltips
-const STAT_DEFS = [
-  { k:"PAC", stat:"VOL", tip:"Volume — tweet pace & posting activity" },
-  { k:"SHO", stat:"ENG", tip:"Engagement — follower / following ratio" },
-  { k:"PAS", stat:"VRL", tip:"Viral reach — content spread & sharing" },
-  { k:"DRI", stat:"INF", tip:"Influence — raw follower count" },
-  { k:"DEF", stat:"CLT", tip:"Clout — listed count & perceived authority" },
-];
+// Position-aware stat labels — each position maps CT metrics to
+// the football attributes that make sense for that role
+const POS_STATS: Record<string, { k:string; stat:string; tip:string }[]> = {
+  GK: [
+    { k:"DIV", stat:"ENG", tip:"Diving — engagement & reactivity to content" },
+    { k:"HAN", stat:"CLT", tip:"Handling — clout & listed count (how trusted you are)" },
+    { k:"KIC", stat:"VRL", tip:"Kicking — viral reach & content distribution" },
+    { k:"REF", stat:"VOL", tip:"Reflexes — posting volume & response speed" },
+    { k:"SPD", stat:"INF", tip:"Speed — follower influence & overall reach" },
+  ],
+  DEF: [
+    { k:"PAC", stat:"VOL", tip:"Pace — tweet frequency & posting activity" },
+    { k:"DEF", stat:"ENG", tip:"Defending — engagement & holding attention" },
+    { k:"PHY", stat:"INF", tip:"Physical — follower count & raw presence" },
+    { k:"TAC", stat:"CLT", tip:"Tackling — clout & listed count authority" },
+    { k:"PAS", stat:"VRL", tip:"Passing — viral reach & content spread" },
+  ],
+  MID: [
+    { k:"PAC", stat:"VOL", tip:"Pace — tweet pace & activity" },
+    { k:"SHO", stat:"ENG", tip:"Shooting — engagement & impact rate" },
+    { k:"PAS", stat:"VRL", tip:"Passing — viral reach & content spread" },
+    { k:"DRI", stat:"INF", tip:"Dribbling — follower influence & skill" },
+    { k:"DEF", stat:"CLT", tip:"Defending — clout & listed authority" },
+  ],
+  FWD: [
+    { k:"PAC", stat:"VOL", tip:"Pace — tweet speed & posting frequency" },
+    { k:"SHO", stat:"ENG", tip:"Shooting — engagement & finishing ability" },
+    { k:"DRI", stat:"INF", tip:"Dribbling — follower influence" },
+    { k:"PAS", stat:"VRL", tip:"Passing — viral content spread" },
+    { k:"PHY", stat:"CLT", tip:"Physical — clout & listed count strength" },
+  ],
+};
+
+function getStatDefs(posCode: string) {
+  if (posCode === "GK")                              return POS_STATS.GK;
+  if (["CB","LB","RB"].includes(posCode))            return POS_STATS.DEF;
+  if (["CDM","CM","CAM"].includes(posCode))          return POS_STATS.MID;
+  return POS_STATS.FWD;
+}
 
 function ShieldCard({ card, size="large", onClick }) {
   const [hovStat, setHovStat] = useState<string|null>(null);
   const t = card.tier;
   const isLg = size === "large";
+  const statDefs = getStatDefs(card.position?.code ?? "CM");
   const W = isLg ? 280 : 175;
   const H = isLg ? 400 : 250;
   const s = isLg ? 1 : 0.625; // scale factor
@@ -562,7 +595,7 @@ function ShieldCard({ card, size="large", onClick }) {
 
         {/* Stats — FIFA FC style */}
         <div style={{borderTop:`1px solid ${t.border}40`,paddingTop:Math.round(8*s),display:"flex",justifyContent:"space-around"}}>
-          {STAT_DEFS.map(sd => {
+          {statDefs.map(sd => {
             const val = card.stats?.[sd.stat] ?? 60;
             return (
               <div key={sd.k} style={{textAlign:"center",position:"relative"}}
@@ -946,7 +979,7 @@ function Nav({ onHome, right }) {
 }
 
 // ─── LANDING ──────────────────────────────────────────────────
-function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard, onMyTeam, sessionLoading }) {
+function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard, onMyTeam, sessionLoading, totalClaimed }) {
   const [hov, setHov] = useState(false);
   const preview = useRef([createCard(MOCK_PROFILES[1],"ST"), createCard(MOCK_PROFILES[7],"CM")]).current;
   const totalSigned = teams.reduce((s,t)=>s+t.memberIds.length,0);
@@ -992,7 +1025,7 @@ function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard
             {/* Live stats */}
             <div style={{display:"flex",gap:24,marginTop:32,flexWrap:"wrap"}}>
               {[
-                {v:pool.length, l:"Cards Claimed"},
+                {v:totalClaimed, l:"Cards Claimed"},
                 {v:`${totalSigned}/${teams.length*11}`, l:"Spots Filled"},
                 {v:`${fullTeams}/32`, l:"Full Squads"},
               ].map(s=>(
@@ -1002,9 +1035,9 @@ function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard
             {/* Pool fill bar */}
             <div style={{marginTop:18,maxWidth:340}}>
               <div style={{height:3,background:"rgba(255,255,255,0.06)",borderRadius:2,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${Math.min((pool.length/POOL_CAP)*100,100)}%`,background:"linear-gradient(90deg,#9945FF,#FBBF24)",borderRadius:2,transition:"width 0.5s"}}/>
+                <div style={{height:"100%",width:`${Math.min((totalClaimed/POOL_CAP)*100,100)}%`,background:"linear-gradient(90deg,#9945FF,#FBBF24)",borderRadius:2,transition:"width 0.5s"}}/>
               </div>
-              <div style={{fontSize:9,color:"rgba(255,255,255,0.25)",marginTop:4,letterSpacing:1}}>{POOL_CAP - pool.length} OF {POOL_CAP} SPOTS REMAINING</div>
+              <div style={{fontSize:9,color:"rgba(255,255,255,0.25)",marginTop:4,letterSpacing:1}}>{POOL_CAP - totalClaimed} OF {POOL_CAP} SPOTS REMAINING</div>
             </div>
           </div>
           <div style={{flex:"0 0 auto",position:"relative",height:340,width:280}}>
@@ -1971,7 +2004,7 @@ export default function CTWCApp() {
         </div>
       )}
 
-      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
+      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
       {page==="reveal"      && pending && (
         <div style={{minHeight:"100vh",background:"#070B14",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
