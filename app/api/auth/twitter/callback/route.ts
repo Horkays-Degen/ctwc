@@ -109,7 +109,15 @@ export async function GET(req: NextRequest) {
     avg_impressions: avgImpressions,
   };
 
-  const { stats, ovr, tier, badges, position } = buildCard(profile);
+  const built = buildCard(profile);
+  let { stats, ovr, tier, badges } = built;
+  // Cap GKs at 32 (one per team) — high-INF overflow → CB
+  let position = built.position;
+  if (position === "GK") {
+    const { count: gkCount } = await supabase
+      .from("cards").select("*", { count: "exact", head: true }).eq("position", "GK");
+    if ((gkCount ?? 0) >= 32) position = "CB";
+  }
 
   const { data: newCard, error: insertErr } = await supabase.from("cards").insert({
     x_handle:     profile.x_handle,

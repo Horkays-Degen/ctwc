@@ -97,8 +97,11 @@ const SFX = {
     if (this.muted) return;
     const c = getCtx(); if (!c) return;
     const dur = phase === "build" ? 2.0 : phase === "roar" ? 0.9 : 2.8;
-    const sz = Math.ceil((dur + 0.5) * c.sampleRate);
-    const buf = c.createBuffer(2, sz, c.sampleRate);
+    // Use half sample rate (22kHz) — crowd noise is low-frequency, quality is identical
+    // and buffer creation is 2× faster, eliminating the frame drop on reveal
+    const sr  = Math.floor(c.sampleRate / 2);
+    const sz  = Math.ceil((dur + 0.5) * sr);
+    const buf = c.createBuffer(2, sz, sr);
     for (let ch = 0; ch < 2; ch++) {
       const d = buf.getChannelData(ch);
       for (let i = 0; i < sz; i++) d[i] = Math.random() * 2 - 1;
@@ -667,11 +670,13 @@ function CardReveal({ card, onDone }) {
   }))).current;
 
   useEffect(()=>{
-    SFX.crowd("build");                                              // stadium murmur builds
-    const t1 = setTimeout(()=>{ setPhase("rip");  SFX.crowd("roar"); }, 1900);  // pack rips + crowd explodes
-    const t2 = setTimeout(()=>{ setPhase("reveal"); SFX.reveal(t.name); }, 2250); // card zooms in + fanfare
+    // Defer first audio call by 80ms so the pack animation renders before
+    // the noise buffer is generated (buffer fill was blocking the first frame)
+    const t0 = setTimeout(()=> SFX.crowd("build"), 80);
+    const t1 = setTimeout(()=>{ setPhase("rip");  SFX.crowd("roar"); }, 1900);
+    const t2 = setTimeout(()=>{ setPhase("reveal"); SFX.reveal(t.name); }, 2250);
     const t3 = setTimeout(()=>{ setPhase("done"); onDone?.(); }, 4600);
-    return()=>{ clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    return()=>{ clearTimeout(t0); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   },[]);
 
   return (
