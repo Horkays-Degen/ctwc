@@ -6,20 +6,26 @@ import { createClient } from "@/lib/supabase";
 const SLOT_POSITIONS = ["GK","CB","CB","LB","RB","CM","CM","CAM","LW","RW","ST"];
 
 function transformCard(row: any) {
+  // Resolve tier: DB stores the name string; ShieldCard needs the full TIERS object
+  const tierName = typeof row.tier === "string" ? row.tier : (row.tier?.name ?? "Common");
+  const tier = Object.values(TIERS).find(t => t.name === tierName) ?? TIERS.COMMON;
+  // Resolve position: DB stores the code string; ShieldCard needs {code, cat, weight}
+  const posCode = typeof row.position === "string" ? row.position : (row.position?.code ?? "CM");
+  const position = POSITIONS.find(p => p.code === posCode) ?? POSITIONS.find(p => p.code === "CM")!;
   return {
     id:          row.id || '',
     handle:      row.x_handle || '',
     displayName: row.display_name || row.x_handle || 'CT Player',
     avatarUrl:   row.avatar_url || '',
     ovr:         row.ovr || 60,
-    tier:        row.tier || 'CT Player',
+    tier,
     stats:       row.stats || { ENG:60, INF:60, CLT:60, VOL:60, VRL:60, OVR:60 },
     badges:      row.badges || [],
     teamId:      row.team_id || null,
-    position:    row.position || null,
+    position,
     rawProfile: {
       followers:    row.followers || 0,
-      followingCount: row.following || 0,
+      following:    row.following || 0,
       listedCount:  row.listed_count || 0,
       tweetCount:   row.tweet_count || 0,
       verified:     row.verified || false,
