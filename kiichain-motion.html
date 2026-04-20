@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KIICHAIN — The Flywheel</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0010;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+
+  canvas#bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+
+  #stage {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  /* ── SCENES ── */
+  .scene {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+  }
+
+  /* ── SCENE 1 — INTRO ── */
+  #s1 .tagline {
+    font-size: clamp(11px, 1.4vw, 16px);
+    letter-spacing: 0.5em;
+    text-transform: uppercase;
+    color: #c084fc;
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  #s1 .brand {
+    font-size: clamp(52px, 10vw, 120px);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #e879f9, #a855f7, #7c3aed, #c026d3);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    opacity: 0;
+    transform: scale(0.7);
+    line-height: 1;
+    text-align: center;
+  }
+  #s1 .sub {
+    font-size: clamp(14px, 2vw, 22px);
+    color: #d8b4fe;
+    letter-spacing: 0.12em;
+    opacity: 0;
+    transform: translateY(15px);
+    margin-top: 12px;
+  }
+
+  /* ── SCENE 2 — FLYWHEEL ── */
+  #s2 .fw-label {
+    font-size: clamp(28px, 5vw, 64px);
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: 0.06em;
+    opacity: 0;
+    text-transform: uppercase;
+  }
+  #s2 .fw-sub {
+    font-size: clamp(13px, 1.6vw, 18px);
+    color: #a78bfa;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    opacity: 0;
+    margin-top: 8px;
+  }
+  #s2 canvas#wheel {
+    opacity: 0;
+    margin-top: 24px;
+  }
+
+  /* ── SCENE 3 — PILLARS ── */
+  #s3 .pillars-title {
+    font-size: clamp(16px, 2.2vw, 28px);
+    color: #e879f9;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    opacity: 0;
+    margin-bottom: 32px;
+  }
+  .pillar-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .pillar {
+    background: rgba(139,92,246,0.12);
+    border: 1px solid rgba(167,139,250,0.3);
+    border-radius: 16px;
+    padding: 20px 28px;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(30px);
+    backdrop-filter: blur(12px);
+    min-width: 140px;
+  }
+  .pillar .icon { font-size: 28px; margin-bottom: 8px; }
+  .pillar .name {
+    font-size: clamp(11px, 1.2vw, 14px);
+    font-weight: 700;
+    color: #c4b5fd;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* ── SCENE 4 — SELF SUSTAINING ── */
+  #s4 .big-word {
+    font-size: clamp(36px, 7vw, 88px);
+    font-weight: 900;
+    line-height: 1;
+    text-align: center;
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+  #s4 .big-word span {
+    background: linear-gradient(90deg, #f0abfc, #a855f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  #s4 .descriptor {
+    font-size: clamp(12px, 1.5vw, 17px);
+    color: #d8b4fe;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    opacity: 0;
+    margin-top: 14px;
+  }
+
+  /* ── SCENE 5 — CLOSING ── */
+  #s5 .close-brand {
+    font-size: clamp(40px, 8vw, 96px);
+    font-weight: 900;
+    background: linear-gradient(135deg, #f0abfc 0%, #a855f7 50%, #6d28d9 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    opacity: 0;
+    letter-spacing: 0.06em;
+    text-align: center;
+  }
+  #s5 .close-tag {
+    font-size: clamp(12px, 1.6vw, 18px);
+    color: #7c3aed;
+    letter-spacing: 0.5em;
+    text-transform: uppercase;
+    opacity: 0;
+    margin-top: 10px;
+  }
+  #s5 .glow-ring {
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    border: 2px solid rgba(168,85,247,0.25);
+    animation: pulse-ring 2.5s ease-in-out infinite;
+    opacity: 0;
+  }
+  #s5 .glow-ring:nth-child(2) { animation-delay: 0.6s; width: 380px; height: 380px; border-color: rgba(192,38,211,0.3); }
+  #s5 .glow-ring:nth-child(3) { animation-delay: 1.2s; width: 260px; height: 260px; border-color: rgba(124,58,237,0.35); }
+
+  @keyframes pulse-ring {
+    0%   { transform: scale(0.95); opacity: 0.6; }
+    50%  { transform: scale(1.05); opacity: 1; }
+    100% { transform: scale(0.95); opacity: 0.6; }
+  }
+
+  /* ── PROGRESS BAR ── */
+  #progress {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #7c3aed, #e879f9);
+    z-index: 100;
+    transition: width 0.1s linear;
+    box-shadow: 0 0 12px #a855f7;
+  }
+
+  /* ── REPLAY ── */
+  #replay {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 200;
+    background: rgba(139,92,246,0.2);
+    border: 1px solid rgba(167,139,250,0.4);
+    color: #c4b5fd;
+    padding: 10px 22px;
+    border-radius: 999px;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+    opacity: 0;
+    transition: background 0.2s, opacity 0.4s;
+    pointer-events: all;
+  }
+  #replay:hover { background: rgba(139,92,246,0.4); }
+
+  /* ── SCAN LINE ── */
+  #scanline {
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.04) 2px,
+      rgba(0,0,0,0.04) 4px
+    );
+    z-index: 50;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+<div id="scanline"></div>
+
+<div id="stage">
+
+  <!-- SCENE 1: BRAND INTRO -->
+  <div class="scene" id="s1">
+    <div class="tagline">Introducing</div>
+    <div class="brand">KIICHAIN</div>
+    <div class="sub">The Future of Value</div>
+  </div>
+
+  <!-- SCENE 2: FLYWHEEL -->
+  <div class="scene" id="s2">
+    <div class="fw-label">The Flywheel</div>
+    <div class="fw-sub">perpetual motion in motion</div>
+    <canvas id="wheel" width="320" height="320"></canvas>
+  </div>
+
+  <!-- SCENE 3: PILLARS -->
+  <div class="scene" id="s3">
+    <div class="pillars-title">Built on Four Pillars</div>
+    <div class="pillar-row">
+      <div class="pillar" id="p1"><div class="icon">⚡</div><div class="name">Velocity</div></div>
+      <div class="pillar" id="p2"><div class="icon">🔗</div><div class="name">Chain Trust</div></div>
+      <div class="pillar" id="p3"><div class="icon">♾️</div><div class="name">Infinite Loop</div></div>
+      <div class="pillar" id="p4"><div class="icon">🌐</div><div class="name">Network Effect</div></div>
+    </div>
+  </div>
+
+  <!-- SCENE 4: SELF SUSTAINING -->
+  <div class="scene" id="s4">
+    <div class="big-word"><span>Self</span></div>
+    <div class="big-word" style="transform:translateX(60px)"><span>Sustaining</span></div>
+    <div class="descriptor">The model that feeds itself</div>
+  </div>
+
+  <!-- SCENE 5: CLOSING -->
+  <div class="scene" id="s5">
+    <div class="glow-ring"></div>
+    <div class="glow-ring"></div>
+    <div class="glow-ring"></div>
+    <div class="close-brand">KIICHAIN</div>
+    <div class="close-tag">Flywheel · Self Sustaining · Forever</div>
+  </div>
+
+</div>
+
+<div id="progress" style="width:0%"></div>
+<button id="replay">↺ REPLAY</button>
+
+<script>
+// ── AUDIO ENGINE ─────────────────────────────────────────
+let actx = null;
+let masterGain = null;
+
+function getAudio() {
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = actx.createGain();
+    masterGain.gain.value = 0.72;
+    masterGain.connect(actx.destination);
+    startAmbient();
+  }
+  return actx;
+}
+
+// Reverb convolver (synthetic impulse)
+function makeReverb(duration = 2.2, decay = 2.5) {
+  const ctx = getAudio();
+  const rate = ctx.sampleRate;
+  const len  = rate * duration;
+  const buf  = ctx.createBuffer(2, len, rate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+  }
+  const conv = ctx.createConvolver();
+  conv.buffer = buf;
+  return conv;
+}
+
+let reverbNode = null;
+function getReverb() {
+  if (!reverbNode) reverbNode = makeReverb();
+  return reverbNode;
+}
+
+// ── AMBIENT DRONE ─────────────────────────────────────────
+function startAmbient() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+
+  // Sub-bass pad — slowly modulated
+  const freqs = [55, 82.4, 110, 164.8];
+  freqs.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const lfo  = ctx.createOscillator();
+    const lfoG = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.08 + i * 0.03;
+    lfoG.gain.value = freq * 0.012;
+
+    lfo.connect(lfoG);
+    lfoG.connect(osc.frequency);
+    osc.connect(gain);
+    gain.connect(getReverb());
+    getReverb().connect(masterGain);
+
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.055 / (i + 1), t + 3);
+
+    osc.start(t);
+    lfo.start(t);
+
+    // slow fade out at end
+    gain.gain.setValueAtTime(0.055 / (i + 1), t + 16);
+    gain.gain.linearRampToValueAtTime(0, t + 21);
+    osc.stop(t + 22);
+    lfo.stop(t + 22);
+  });
+
+  // Shimmer high pad
+  [880, 1320, 1760].forEach((freq, i) => {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(getReverb());
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.008, t + 5);
+    gain.gain.setValueAtTime(0.008, t + 16);
+    gain.gain.linearRampToValueAtTime(0, t + 21);
+    osc.start(t); osc.stop(t + 22);
+  });
+}
+
+// ── WHOOSH (scene transition) ─────────────────────────────
+function playWhoosh(vol = 0.5) {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 0.6, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+
+  const src    = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain   = ctx.createGain();
+
+  src.buffer = buf;
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(800, t);
+  filter.frequency.exponentialRampToValueAtTime(4000, t + 0.3);
+  filter.Q.value = 0.8;
+
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(masterGain);
+
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(vol * 0.35, t + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+  src.start(t); src.stop(t + 0.6);
+}
+
+// ── REVEAL CHIME (text appears) ───────────────────────────
+function playReveal(pitch = 880, vol = 0.3) {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+
+  const osc  = ctx.createOscillator();
+  const osc2 = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = 'sine';  osc.frequency.value = pitch;
+  osc2.type = 'sine'; osc2.frequency.value = pitch * 1.5;
+
+  osc.connect(gain); osc2.connect(gain);
+  gain.connect(getReverb());
+
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(vol * 0.28, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 1.1);
+
+  osc.start(t); osc.stop(t + 1.2);
+  osc2.start(t); osc2.stop(t + 1.2);
+}
+
+// ── POWER IMPACT (brand reveal) ───────────────────────────
+function playImpact(vol = 0.6) {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+
+  // Sub thump
+  const sub  = ctx.createOscillator();
+  const subG = ctx.createGain();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(80, t);
+  sub.frequency.exponentialRampToValueAtTime(30, t + 0.35);
+  sub.connect(subG);
+  subG.connect(masterGain);
+  subG.gain.setValueAtTime(vol * 0.6, t);
+  subG.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  sub.start(t); sub.stop(t + 0.45);
+
+  // Noise crack
+  const nbuf = ctx.createBuffer(1, ctx.sampleRate * 0.15, ctx.sampleRate);
+  const nd = nbuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  const nsrc = ctx.createBufferSource();
+  const nfil = ctx.createBiquadFilter();
+  const nG   = ctx.createGain();
+  nsrc.buffer = nbuf;
+  nfil.type = 'highpass'; nfil.frequency.value = 1200;
+  nsrc.connect(nfil); nfil.connect(nG); nG.connect(masterGain);
+  nG.gain.setValueAtTime(vol * 0.18, t);
+  nG.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  nsrc.start(t); nsrc.stop(t + 0.16);
+}
+
+// ── FLYWHEEL TICK ─────────────────────────────────────────
+function playTick() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const g   = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.value = 320;
+  osc.connect(g); g.connect(masterGain);
+  g.gain.setValueAtTime(0.12, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+  osc.start(t); osc.stop(t + 0.07);
+}
+
+// ── PILLAR PING ───────────────────────────────────────────
+function playPillarPing(i) {
+  const pitches = [523.25, 659.25, 783.99, 1046.5];
+  playReveal(pitches[i] || 880, 0.22);
+}
+
+// ── CLOSING SWELL ─────────────────────────────────────────
+function playClosingSwell() {
+  const ctx = getAudio();
+  const t = ctx.currentTime;
+  const chord = [261.63, 329.63, 392, 523.25, 659.25];
+  chord.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const g   = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    osc.connect(g);
+    g.connect(getReverb());
+    g.gain.setValueAtTime(0, t + i * 0.12);
+    g.gain.linearRampToValueAtTime(0.1 - i * 0.012, t + i * 0.12 + 0.4);
+    g.gain.linearRampToValueAtTime(0, t + 3.5);
+    osc.start(t + i * 0.12);
+    osc.stop(t + 4);
+  });
+}
+
+// ── PARTICLE BG ──────────────────────────────────────────
+const bgCanvas = document.getElementById('bg');
+const bgCtx = bgCanvas.getContext('2d');
+bgCanvas.width = window.innerWidth;
+bgCanvas.height = window.innerHeight;
+
+const particles = [];
+for (let i = 0; i < 120; i++) {
+  particles.push({
+    x: Math.random() * bgCanvas.width,
+    y: Math.random() * bgCanvas.height,
+    r: Math.random() * 1.8 + 0.3,
+    vx: (Math.random() - 0.5) * 0.25,
+    vy: (Math.random() - 0.5) * 0.25,
+    alpha: Math.random() * 0.6 + 0.1,
+    hue: Math.random() * 60 + 260  // purples 260-320
+  });
+}
+
+// Nebula blobs
+const blobs = [
+  { x: 0.15, y: 0.3,  r: 380, c: 'rgba(124,58,237,0.12)' },
+  { x: 0.85, y: 0.7,  r: 320, c: 'rgba(192,38,211,0.10)' },
+  { x: 0.5,  y: 0.15, r: 280, c: 'rgba(109,40,217,0.09)' },
+];
+
+function drawBg() {
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+  bgCtx.fillStyle = '#0a0010';
+  bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+  blobs.forEach(b => {
+    const grad = bgCtx.createRadialGradient(
+      b.x * bgCanvas.width, b.y * bgCanvas.height, 0,
+      b.x * bgCanvas.width, b.y * bgCanvas.height, b.r
+    );
+    grad.addColorStop(0, b.c);
+    grad.addColorStop(1, 'transparent');
+    bgCtx.fillStyle = grad;
+    bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+  });
+
+  particles.forEach(p => {
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0) p.x = bgCanvas.width;
+    if (p.x > bgCanvas.width) p.x = 0;
+    if (p.y < 0) p.y = bgCanvas.height;
+    if (p.y > bgCanvas.height) p.y = 0;
+    bgCtx.beginPath();
+    bgCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    bgCtx.fillStyle = `hsla(${p.hue},80%,75%,${p.alpha})`;
+    bgCtx.fill();
+  });
+
+  requestAnimationFrame(drawBg);
+}
+drawBg();
+
+// ── FLYWHEEL CANVAS ───────────────────────────────────────
+const wc = document.getElementById('wheel');
+const wctx = wc.getContext('2d');
+let wheelAngle = 0;
+
+const segments = [
+  { label: 'STAKE',   color: '#7c3aed' },
+  { label: 'EARN',    color: '#a855f7' },
+  { label: 'GROW',    color: '#c026d3' },
+  { label: 'REINVEST',color: '#9333ea' },
+  { label: 'SCALE',   color: '#6d28d9' },
+  { label: 'REPEAT',  color: '#be185d' },
+];
+const N = segments.length;
+
+function drawWheel(alpha = 1) {
+  wctx.clearRect(0, 0, 320, 320);
+  const cx = 160, cy = 160, R = 130, inner = 55;
+
+  // outer glow
+  const glow = wctx.createRadialGradient(cx, cy, inner, cx, cy, R + 20);
+  glow.addColorStop(0, 'rgba(168,85,247,0)');
+  glow.addColorStop(0.7, 'rgba(168,85,247,0.1)');
+  glow.addColorStop(1, 'rgba(168,85,247,0)');
+  wctx.fillStyle = glow;
+  wctx.beginPath();
+  wctx.arc(cx, cy, R + 20, 0, Math.PI * 2);
+  wctx.fill();
+
+  const step = (Math.PI * 2) / N;
+
+  segments.forEach((seg, i) => {
+    const start = wheelAngle + i * step;
+    const end = start + step - 0.04;
+
+    // segment
+    wctx.beginPath();
+    wctx.moveTo(cx, cy);
+    wctx.arc(cx, cy, R, start, end);
+    wctx.closePath();
+    wctx.fillStyle = seg.color + (Math.round(alpha * 255)).toString(16).padStart(2,'0');
+    wctx.fill();
+
+    // inner cutout
+    wctx.beginPath();
+    wctx.arc(cx, cy, inner, 0, Math.PI * 2);
+    wctx.fillStyle = '#0a0010';
+    wctx.fill();
+
+    // label
+    const midAngle = start + (step - 0.04) / 2;
+    const lx = cx + (inner + (R - inner) / 2) * Math.cos(midAngle);
+    const ly = cy + (inner + (R - inner) / 2) * Math.sin(midAngle);
+    wctx.save();
+    wctx.translate(lx, ly);
+    wctx.rotate(midAngle + Math.PI / 2);
+    wctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    wctx.font = 'bold 9.5px Segoe UI';
+    wctx.textAlign = 'center';
+    wctx.fillText(seg.label, 0, 3);
+    wctx.restore();
+  });
+
+  // center hub
+  const hub = wctx.createRadialGradient(cx, cy, 0, cx, cy, inner);
+  hub.addColorStop(0, '#c026d3');
+  hub.addColorStop(1, '#6d28d9');
+  wctx.beginPath();
+  wctx.arc(cx, cy, inner, 0, Math.PI * 2);
+  wctx.fillStyle = hub;
+  wctx.fill();
+
+  // center text
+  wctx.fillStyle = '#fff';
+  wctx.font = 'bold 11px Segoe UI';
+  wctx.textAlign = 'center';
+  wctx.fillText('KII', cx, cy - 5);
+  wctx.font = '9px Segoe UI';
+  wctx.fillStyle = 'rgba(255,255,255,0.7)';
+  wctx.fillText('CHAIN', cx, cy + 8);
+
+  // arrow
+  const arrowR = R + 8;
+  const arrowAngle = wheelAngle + Math.PI * 0.08;
+  const ax = cx + arrowR * Math.cos(arrowAngle);
+  const ay = cy + arrowR * Math.sin(arrowAngle);
+  wctx.save();
+  wctx.translate(ax, ay);
+  wctx.rotate(arrowAngle + Math.PI / 2);
+  wctx.fillStyle = '#e879f9';
+  wctx.beginPath();
+  wctx.moveTo(0, -7);
+  wctx.lineTo(4, 4);
+  wctx.lineTo(-4, 4);
+  wctx.closePath();
+  wctx.fill();
+  wctx.restore();
+}
+
+function spinWheel() {
+  wheelAngle += 0.018;
+  drawWheel(parseFloat(document.getElementById('wheel').style.opacity) || 0);
+  requestAnimationFrame(spinWheel);
+}
+spinWheel();
+
+// ── TINY TWEEN ────────────────────────────────────────────
+function tween(el, from, to, dur, ease, onDone) {
+  const start = performance.now();
+  function step(now) {
+    let t = Math.min((now - start) / dur, 1);
+    if (ease === 'easeOut') t = 1 - Math.pow(1 - t, 3);
+    if (ease === 'easeIn')  t = t * t * t;
+    if (ease === 'easeInOut') t = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+    Object.keys(from).forEach(k => {
+      const v = from[k] + (to[k] - from[k]) * t;
+      if (k === 'opacity')    el.style.opacity = v;
+      if (k === 'scaleX')     el.style.transform = `scaleX(${v})`;
+      if (k === 'scale')      el.style.transform = `scale(${v})`;
+      if (k === 'translateY') el.style.transform = `translateY(${v}px)`;
+      if (k === 'translateX') el.style.transform = `translateX(${v}px)`;
+    });
+    if (t < 1) requestAnimationFrame(step);
+    else if (onDone) onDone();
+  }
+  requestAnimationFrame(step);
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+function fadeIn(el, dur=400)  { return new Promise(r => tween(el, {opacity:0},{opacity:1}, dur, 'easeOut', r)); }
+function fadeOut(el, dur=400) { return new Promise(r => tween(el, {opacity:1},{opacity:0}, dur, 'easeIn',  r)); }
+function showScene(id)  { document.getElementById(id).style.opacity = 1; }
+function hideScene(id)  { document.getElementById(id).style.opacity = 0; }
+
+// ── PROGRESS ─────────────────────────────────────────────
+const TOTAL = 20000;
+let startTime;
+function updateProgress() {
+  const elapsed = performance.now() - startTime;
+  const pct = Math.min(100, (elapsed / TOTAL) * 100);
+  document.getElementById('progress').style.width = pct + '%';
+  if (pct < 100) requestAnimationFrame(updateProgress);
+}
+
+// ── TIMELINE ─────────────────────────────────────────────
+async function runTimeline() {
+  getAudio(); // unlock AudioContext
+  startTime = performance.now();
+  requestAnimationFrame(updateProgress);
+  document.getElementById('replay').style.opacity = 0;
+
+  // reset all
+  ['s1','s2','s3','s4','s5'].forEach(hideScene);
+
+  // ── SCENE 1: INTRO (0–4s) ──────────────────────────
+  showScene('s1');
+  const tag = document.querySelector('#s1 .tagline');
+  const brand = document.querySelector('#s1 .brand');
+  const sub = document.querySelector('#s1 .sub');
+
+  await wait(200);
+  playReveal(440, 0.18);
+  tag.style.transition = 'opacity 0.7s ease, transform 0.7s ease';
+  tag.style.opacity = 1; tag.style.transform = 'translateY(0)';
+  await wait(700);
+  playImpact(0.7);
+  brand.style.transition = 'opacity 0.9s cubic-bezier(0.34,1.56,0.64,1), transform 0.9s cubic-bezier(0.34,1.56,0.64,1)';
+  brand.style.opacity = 1; brand.style.transform = 'scale(1)';
+  await wait(500);
+  playReveal(660, 0.2);
+  sub.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+  sub.style.opacity = 1; sub.style.transform = 'translateY(0)';
+  await wait(2200);
+  playWhoosh(0.5);
+  document.getElementById('s1').style.transition = 'opacity 0.6s ease';
+  hideScene('s1'); await wait(600);
+
+  // ── SCENE 2: FLYWHEEL (4–9s) ───────────────────────
+  showScene('s2');
+  const fwLabel = document.querySelector('#s2 .fw-label');
+  const fwSub   = document.querySelector('#s2 .fw-sub');
+  const wheelEl = document.getElementById('wheel');
+
+  playReveal(523, 0.25);
+  fwLabel.style.transition = 'opacity 0.7s ease, letter-spacing 0.9s ease';
+  fwLabel.style.opacity = 1;
+  await wait(300);
+  fwLabel.style.letterSpacing = '0.18em';
+  await wait(500);
+  playReveal(392, 0.18);
+  fwSub.style.transition = 'opacity 0.6s ease';
+  fwSub.style.opacity = 1;
+  await wait(400);
+  wheelEl.style.transition = 'opacity 0.8s ease';
+  wheelEl.style.opacity = 1;
+  // Ticks accelerating as wheel spins up
+  for (let i = 0; i < 6; i++) { await wait(280 - i * 30); playTick(); }
+  await wait(1400);
+  playWhoosh(0.45);
+  document.getElementById('s2').style.transition = 'opacity 0.6s ease';
+  hideScene('s2'); await wait(600);
+
+  // ── SCENE 3: PILLARS (9–14s) ───────────────────────
+  showScene('s3');
+  const ptitle = document.querySelector('#s3 .pillars-title');
+  playReveal(587, 0.22);
+  ptitle.style.transition = 'opacity 0.7s ease';
+  ptitle.style.opacity = 1;
+  await wait(500);
+
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('p' + i);
+    await wait(220);
+    playPillarPing(i - 1);
+    el.style.transition = 'opacity 0.5s ease, transform 0.5s cubic-bezier(0.34,1.56,0.64,1)';
+    el.style.opacity = 1; el.style.transform = 'translateY(0)';
+  }
+  await wait(2800);
+  playWhoosh(0.45);
+  document.getElementById('s3').style.transition = 'opacity 0.6s ease';
+  hideScene('s3'); await wait(600);
+
+  // ── SCENE 4: SELF SUSTAINING (14–18s) ──────────────
+  showScene('s4');
+  const words = document.querySelectorAll('#s4 .big-word');
+  const desc  = document.querySelector('#s4 .descriptor');
+
+  playImpact(0.6);
+  words[0].style.transition = 'opacity 0.6s ease, transform 0.8s cubic-bezier(0.23,1,0.32,1)';
+  words[0].style.opacity = 1; words[0].style.transform = 'translateX(0)';
+  await wait(260);
+  playImpact(0.5);
+  words[1].style.transition = 'opacity 0.6s ease, transform 0.8s cubic-bezier(0.23,1,0.32,1)';
+  words[1].style.opacity = 1; words[1].style.transform = 'translateX(0)';
+  await wait(600);
+  playReveal(740, 0.18);
+  desc.style.transition = 'opacity 0.7s ease';
+  desc.style.opacity = 1;
+  await wait(2600);
+  playWhoosh(0.5);
+  document.getElementById('s4').style.transition = 'opacity 0.6s ease';
+  hideScene('s4'); await wait(600);
+
+  // ── SCENE 5: CLOSING (18–20s) ──────────────────────
+  showScene('s5');
+  const rings = document.querySelectorAll('#s5 .glow-ring');
+  rings.forEach(r => { r.style.transition = 'opacity 0.8s ease'; r.style.opacity = 1; });
+
+  const cBrand = document.querySelector('#s5 .close-brand');
+  const cTag   = document.querySelector('#s5 .close-tag');
+  await wait(300);
+  playClosingSwell();
+  cBrand.style.transition = 'opacity 1s ease';
+  cBrand.style.opacity = 1;
+  await wait(700);
+  cTag.style.transition = 'opacity 0.8s ease';
+  cTag.style.opacity = 1;
+
+  await wait(1800);
+  document.getElementById('replay').style.opacity = 1;
+}
+
+// ── REPLAY ────────────────────────────────────────────────
+document.getElementById('replay').addEventListener('click', () => {
+  // Reset audio engine so ambient drone restarts fresh
+  if (actx) { actx.close(); actx = null; masterGain = null; reverbNode = null; }
+  // reset inner element styles
+  const resets = [
+    ['#s1 .tagline', {opacity:'0', transform:'translateY(20px)', transition:'none'}],
+    ['#s1 .brand',   {opacity:'0', transform:'scale(0.7)',       transition:'none'}],
+    ['#s1 .sub',     {opacity:'0', transform:'translateY(15px)', transition:'none'}],
+    ['#s2 .fw-label',{opacity:'0', letterSpacing:'0.06em',       transition:'none'}],
+    ['#s2 .fw-sub',  {opacity:'0',                               transition:'none'}],
+    ['#wheel',       {opacity:'0',                               transition:'none'}],
+    ['#s3 .pillars-title', {opacity:'0',                         transition:'none'}],
+    ['#p1',{opacity:'0',transform:'translateY(30px)',transition:'none'}],
+    ['#p2',{opacity:'0',transform:'translateY(30px)',transition:'none'}],
+    ['#p3',{opacity:'0',transform:'translateY(30px)',transition:'none'}],
+    ['#p4',{opacity:'0',transform:'translateY(30px)',transition:'none'}],
+    ['#s4 .big-word:nth-child(1)',{opacity:'0',transform:'translateX(-60px)',transition:'none'}],
+    ['#s4 .big-word:nth-child(2)',{opacity:'0',transform:'translateX(60px)', transition:'none'}],
+    ['#s4 .descriptor',           {opacity:'0',                              transition:'none'}],
+    ['#s5 .glow-ring',            {opacity:'0',                              transition:'none'}],
+    ['#s5 .close-brand',          {opacity:'0',                              transition:'none'}],
+    ['#s5 .close-tag',            {opacity:'0',                              transition:'none'}],
+  ];
+  resets.forEach(([sel, styles]) => {
+    document.querySelectorAll(sel).forEach(el => Object.assign(el.style, styles));
+  });
+  document.getElementById('progress').style.transition = 'none';
+  document.getElementById('progress').style.width = '0%';
+  requestAnimationFrame(() => {
+    document.getElementById('progress').style.transition = '';
+    setTimeout(runTimeline, 50);
+  });
+});
+
+// ── START ─────────────────────────────────────────────────
+runTimeline();
+</script>
+</body>
+</html>
