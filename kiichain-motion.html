@@ -225,6 +225,36 @@
   }
   #replay:hover { background: rgba(139,92,246,0.4); }
 
+  /* ── RECORD ── */
+  #recbtn {
+    position: fixed;
+    bottom: 28px;
+    left: 28px;
+    z-index: 200;
+    background: rgba(192,38,211,0.2);
+    border: 1px solid rgba(240,171,252,0.35);
+    color: #f0abfc;
+    padding: 10px 22px;
+    border-radius: 999px;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+    transition: background 0.2s;
+    pointer-events: all;
+  }
+  #recbtn:hover  { background: rgba(192,38,211,0.4); }
+  #recbtn.active { background: rgba(220,38,38,0.35); border-color: rgba(252,165,165,0.5); color: #fca5a5; }
+  #rec-status {
+    position: fixed;
+    bottom: 68px;
+    left: 28px;
+    z-index: 200;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: #a78bfa;
+    pointer-events: none;
+  }
+
   /* ── SCAN LINE ── */
   #scanline {
     position: fixed;
@@ -293,6 +323,8 @@
 
 <div id="progress" style="width:0%"></div>
 <button id="replay">↺ REPLAY</button>
+<button id="recbtn">⏺ RECORD MP4</button>
+<div id="rec-status"></div>
 
 <script>
 // ── AUDIO ENGINE ─────────────────────────────────────────
@@ -863,6 +895,84 @@ document.getElementById('replay').addEventListener('click', () => {
     document.getElementById('progress').style.transition = '';
     setTimeout(runTimeline, 50);
   });
+});
+
+// ── RECORDER ─────────────────────────────────────────────
+let mediaRecorder = null;
+let recChunks = [];
+
+const recBtn    = document.getElementById('recbtn');
+const recStatus = document.getElementById('rec-status');
+
+recBtn.addEventListener('click', async () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+
+  recStatus.textContent = 'Select this tab in the dialog…';
+
+  let displayStream;
+  try {
+    displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 60, width: 1920, height: 1080 },
+      audio: true   // ticks "Share tab audio" in Chrome's picker
+    });
+  } catch (e) {
+    recStatus.textContent = 'Cancelled.';
+    setTimeout(() => recStatus.textContent = '', 2000);
+    return;
+  }
+
+  // Route synthesized WebAudio into the recording stream
+  const ctx = getAudio();
+  const dest = ctx.createMediaStreamDestination();
+  masterGain.connect(dest);
+  const audioTrack = dest.stream.getAudioTracks()[0];
+  if (audioTrack) displayStream.addTrack(audioTrack);
+
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+    ? 'video/webm;codecs=vp9,opus'
+    : 'video/webm';
+
+  recChunks = [];
+  mediaRecorder = new MediaRecorder(displayStream, { mimeType, videoBitsPerSecond: 8_000_000 });
+
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recChunks.push(e.data); };
+
+  mediaRecorder.onstop = () => {
+    masterGain.disconnect(dest);
+    displayStream.getTracks().forEach(t => t.stop());
+    recBtn.classList.remove('active');
+    recBtn.textContent = '⏺ RECORD MP4';
+    recStatus.textContent = 'Saving…';
+
+    const blob = new Blob(recChunks, { type: mimeType });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = 'kiichain-flywheel.webm';
+    a.click();
+    URL.revokeObjectURL(url);
+    recStatus.textContent = 'Saved! Convert with: ffmpeg -i kiichain-flywheel.webm kiichain-flywheel.mp4';
+    setTimeout(() => recStatus.textContent = '', 8000);
+  };
+
+  mediaRecorder.start(100);
+  recBtn.classList.add('active');
+  recBtn.textContent = '⏹ STOP REC';
+  recStatus.textContent = '● Recording — animation restarting…';
+
+  // Reset audio and restart animation for a clean recording
+  if (actx) { actx.close(); actx = null; masterGain = null; reverbNode = null; }
+
+  // Trigger replay reset
+  document.getElementById('replay').click();
+
+  // Auto-stop when animation finishes (~21s)
+  setTimeout(() => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+  }, 21500);
 });
 
 // ── START ─────────────────────────────────────────────────
