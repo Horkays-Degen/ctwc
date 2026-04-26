@@ -8,7 +8,7 @@ const SLOT_POSITIONS = ["GK","CB","CB","LB","RB","CM","CM","CAM","LW","RW","ST"]
 function transformCard(row: any) {
   // Resolve tier: DB stores the name string; ShieldCard needs the full TIERS object
   const tierName = typeof row.tier === "string" ? row.tier : (row.tier?.name ?? "Common");
-  const tier = Object.values(TIERS).find(t => t.name === tierName) ?? TIERS.COMMON;
+  const tier = Object.values(TIERS).find(t => t.name === tierName) ?? TIERS.CT_PLAYER;
   // Resolve position: DB stores the code string; ShieldCard needs {code, cat, weight}
   const posCode = typeof row.position === "string" ? row.position : (row.position?.code ?? "CM");
   const position = POSITIONS.find(p => p.code === posCode) ?? POSITIONS.find(p => p.code === "CM")!;
@@ -420,6 +420,16 @@ function addCardToTeam(team, card) {
   return t;
 }
 
+// ─── TEAM CREATION CONSTANTS ─────────────────────────────────
+const TEAM_COLORS = [
+  "#FBBF24","#F87171","#34D399","#60A5FA","#A78BFA",
+  "#FB923C","#F472B6","#22D3EE","#4ADE80","#E879F9",
+];
+const TEAM_EMBLEMS = [
+  "⚽","🛡","🦅","🐉","🌟","⚡","🔥","🏆","🦁","🐺",
+  "🌙","💎","⚔","🎯","🌊","🦊","🎖","🏅","🦋","🌺",
+];
+
 // ─── SEED DATA ────────────────────────────────────────────────
 function buildSeedData() {
   // Build all 32 pre-set teams — empty slots, waiting for players
@@ -490,7 +500,7 @@ function getStatDefs(posCode: string) {
   return POS_STATS.FWD;
 }
 
-function ShieldCard({ card, size="large", onClick }) {
+function ShieldCard({ card, size="large", onClick = undefined }: { card: any; size?: string; onClick?: any }) {
   const [hovStat, setHovStat] = useState<string|null>(null);
   const t = card.tier;
   const isLg = size === "large";
@@ -951,7 +961,7 @@ function FootballPitch({ team, myCardId, onTeamUpdate, onCardView }) {
 }
 
 // ─── SHARED NAV ───────────────────────────────────────────────
-function Nav({ onHome, right }) {
+function Nav({ onHome, right = null }: { onHome: any; right?: any }) {
   const [muted, setMuted] = useState(false);
   const toggleMute = () => { const m=!muted; setMuted(m); SFX.muted=m; if(!m) SFX.click(); };
   return (
@@ -1105,7 +1115,7 @@ function CreateTeamPage({ card, onCreated, onBack }) {
   const [name,setName]=useState(""),  [color,setColor]=useState(TEAM_COLORS[0]), [emblem,setEmblem]=useState(TEAM_EMBLEMS[0]);
   const create=()=>{
     if(!name.trim()) return;
-    let t=makeTeam(name.trim(),color,emblem);
+    let t=makeTeam(name.trim(),color,emblem,null);
     t=addCardToTeam(t,card);
     SFX.success();
     onCreated(t);
@@ -1441,22 +1451,166 @@ function TeamsListPage({ teams, onBack, onViewTeam, onClaim }) {
   );
 }
 
-// ─── TOURNAMENT PAGE — 32-team bracket ───────────────────────
-function TournamentPage({ teams, onBack, onBrowse, onBracket }) {
+// ─── MATCH DETAIL MODAL ──────────────────────────────────────
+function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
+  if (!match) return null;
+  const data    = match.match_data ?? {};
+  const events: any[] = data.events ?? [];
+  const hs      = data.homeStrength;
+  const as_     = data.awayStrength;
+  const penalty = match.home_pens !== null && match.home_pens !== undefined;
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(14px)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#0d1117",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,width:"100%",maxWidth:520,maxHeight:"90vh",overflowY:"auto",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+        <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.35)",letterSpacing:2,textTransform:"uppercase"}}>Match Report</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
+        </div>
+        {/* Scoreboard */}
+        <div style={{padding:"28px 20px 20px",textAlign:"center"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:20}}>
+            <div style={{flex:1,textAlign:"right"}}>
+              {homeTeam&&<div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:10}}>
+                <div><div style={{fontSize:14,fontWeight:800,color:match.winner_id===homeTeam.id?"#22C55E":"#fff"}}>{homeTeam.name}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.3)"}}>{homeTeam.memberIds?.length??0}/11</div></div>
+                <div style={{width:38,height:38,borderRadius:9,background:homeTeam.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}><EmblemImg team={homeTeam} size={22}/></div>
+              </div>}
+            </div>
+            <div style={{textAlign:"center",minWidth:100}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center"}}>
+                <span style={{fontSize:44,fontWeight:900,color:match.winner_id===homeTeam?.id?"#22C55E":"rgba(255,255,255,0.7)"}}>{match.home_score??"?"}</span>
+                <span style={{fontSize:24,color:"rgba(255,255,255,0.25)"}}>–</span>
+                <span style={{fontSize:44,fontWeight:900,color:match.winner_id===awayTeam?.id?"#22C55E":"rgba(255,255,255,0.7)"}}>{match.away_score??"?"}</span>
+              </div>
+              {penalty&&<div style={{fontSize:11,color:"#FBBF24",fontWeight:700,marginTop:2}}>Pens: {match.home_pens} – {match.away_pens}</div>}
+              {match.status==="complete"&&<div style={{fontSize:9,color:"rgba(255,255,255,0.25)",letterSpacing:1,marginTop:4,textTransform:"uppercase"}}>Full Time</div>}
+            </div>
+            <div style={{flex:1,textAlign:"left"}}>
+              {awayTeam&&<div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:38,height:38,borderRadius:9,background:awayTeam.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}><EmblemImg team={awayTeam} size={22}/></div>
+                <div><div style={{fontSize:14,fontWeight:800,color:match.winner_id===awayTeam.id?"#22C55E":"#fff"}}>{awayTeam.name}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.3)"}}>{awayTeam.memberIds?.length??0}/11</div></div>
+              </div>}
+            </div>
+          </div>
+          {/* Team strength bars */}
+          {hs&&as_&&(
+            <div style={{marginTop:20,padding:"12px 16px",background:"rgba(255,255,255,0.03)",borderRadius:10,border:"1px solid rgba(255,255,255,0.07)"}}>
+              <div style={{fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Team Strength</div>
+              {(([["Attack",hs.attack,as_.attack],["Defense",hs.defense,as_.defense],["Avg OVR",hs.ovr,as_.ovr]] as [string,number,number][]).map(([label,hv,av])=>{
+                const total=hv+av, hPct=total>0?(hv/total)*100:50;
+                return(<div key={label} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <span style={{fontSize:10,color:homeTeam?.color||"#fff",fontWeight:700,width:28,textAlign:"right"}}>{Math.round(hv)}</span>
+                  <div style={{flex:1,height:6,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden",display:"flex"}}>
+                    <div style={{width:`${hPct}%`,background:`${homeTeam?.color||"#3B82F6"}`,borderRadius:"3px 0 0 3px"}}/>
+                    <div style={{flex:1,background:`${awayTeam?.color||"#EF4444"}`,borderRadius:"0 3px 3px 0"}}/>
+                  </div>
+                  <span style={{fontSize:10,color:awayTeam?.color||"#fff",fontWeight:700,width:28}}>{Math.round(av)}</span>
+                  <span style={{fontSize:9,color:"rgba(255,255,255,0.25)",width:52}}>{label}</span>
+                </div>);
+              }))}
+            </div>
+          )}
+        </div>
+        {/* Goal events */}
+        {events.length>0&&(
+          <div style={{padding:"0 20px 20px"}}>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Match Events</div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {events.map((e:any,i:number)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",borderRadius:8,background:"rgba(255,255,255,0.025)",border:`1px solid ${e.team==="home"?(homeTeam?.color||"#3B82F6"):(awayTeam?.color||"#EF4444")}22`}}>
+                  <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.3)",width:26,textAlign:"right"}}>{e.minute}'</span>
+                  <span style={{fontSize:13}}>⚽</span>
+                  <span style={{flex:1,fontSize:12,fontWeight:700,color:"#fff"}}>{e.scorerName}</span>
+                  <span style={{fontSize:10,color:e.team==="home"?(homeTeam?.color||"#3B82F6"):(awayTeam?.color||"#EF4444"),fontWeight:700}}>{e.team==="home"?homeTeam?.name:awayTeam?.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {events.length===0&&match.status==="complete"&&(
+          <div style={{padding:"0 20px 24px",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:12}}>
+            {data.bye?"Bye — team advances automatically":"0 – 0 (no goals scored)"}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN PANEL ──────────────────────────────────────────────
+function AdminPanel({ tournament, onSeed, onSimulate, loading }: any) {
+  const [pin,  setPin]  = useState("");
+  const [open, setOpen] = useState(false);
+  const [msg,  setMsg]  = useState("");
+  const exec = async (action: "seed"|"simulate") => {
+    const fn = action==="seed" ? onSeed : onSimulate;
+    setMsg("Running…");
+    const result = await fn(pin);
+    setMsg(result);
+  };
+  const RNAMES: Record<number,string> = {1:"R32",2:"R16",3:"QF",4:"SF",5:"Final"};
+  const roundLabel = RNAMES[tournament?.current_round] ?? "—";
+  return (
+    <div style={{margin:"20px 24px 0",padding:"14px 20px",background:"rgba(255,255,255,0.02)",border:"1px dashed rgba(255,255,255,0.10)",borderRadius:12,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:open?14:0}}>
+        <span style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontWeight:600}}>⚙️ Admin</span>
+        <button onClick={()=>setOpen(o=>!o)} style={{fontSize:10,padding:"3px 10px",borderRadius:5,background:"transparent",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.4)",cursor:"pointer"}}>{open?"Hide":"Show"}</button>
+        {tournament?.status!=="registration"&&<span style={{fontSize:10,color:"#FBBF24",fontWeight:700,marginLeft:4}}>Status: {tournament?.status} · Round {roundLabel}</span>}
+      </div>
+      {open&&(
+        <div>
+          <div style={{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
+            <input type="password" value={pin} onChange={e=>setPin(e.target.value)} placeholder="Admin PIN"
+              style={{padding:"7px 12px",borderRadius:7,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none",width:130}}/>
+            {tournament?.status==="registration"&&(
+              <button onClick={()=>exec("seed")} disabled={loading||!pin} style={{padding:"7px 16px",fontSize:12,fontWeight:700,borderRadius:7,background:pin?"rgba(212,165,55,0.15)":"rgba(255,255,255,0.04)",border:`1px solid ${pin?"rgba(212,165,55,0.4)":"rgba(255,255,255,0.1)"}`,color:pin?"#FBBF24":"rgba(255,255,255,0.25)",cursor:pin?"pointer":"not-allowed"}}>🎲 Seed Bracket</button>
+            )}
+            {(tournament?.status==="seeded"||tournament?.status==="active")&&(
+              <button onClick={()=>exec("simulate")} disabled={loading||!pin} style={{padding:"7px 16px",fontSize:12,fontWeight:700,borderRadius:7,background:pin?"rgba(34,197,94,0.1)":"rgba(255,255,255,0.04)",border:`1px solid ${pin?"rgba(34,197,94,0.4)":"rgba(255,255,255,0.1)"}`,color:pin?"#22C55E":"rgba(255,255,255,0.25)",cursor:pin?"pointer":"not-allowed"}}>⚡ Simulate {roundLabel}</button>
+            )}
+          </div>
+          {msg&&<div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:4}}>{msg}</div>}
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:6}}>Seed: shuffles teams into bracket, locks registration. Simulate: runs all matches in current round, advances winners.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TOURNAMENT PAGE — overview + current round ───────────────
+function TournamentPage({ teams, onBack, onBrowse, onBracket, tournament, matches, onAdminSeed, onAdminSimulate, adminLoading }: any) {
+  const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const totalFilled = teams.reduce((s,t)=>s+t.memberIds.length,0);
   const totalSlots  = teams.length * 11;
   const fullTeams   = teams.filter(t=>t.memberIds.length===11).length;
 
-  // Build bracket pairs (seeded by slot index for now — randomised at deadline)
-  const rounds = ["Round of 32","Round of 16","Quarter Finals","Semi Finals","Final"];
-  const bracket = Array.from({length:16},(_,i)=>({
-    home: teams[i*2]   || null,
-    away: teams[i*2+1] || null,
-  }));
+  const status     = tournament?.status ?? "registration";
+  const curRound   = tournament?.current_round ?? 0;
+  const isActive   = status === "active" || status === "seeded" || status === "complete";
+
+  const ROUND_LABEL: Record<number,string> = {1:"Round of 32",2:"Round of 16",3:"Quarter Finals",4:"Semi Finals",5:"Final"};
+
+  // Team lookup by id
+  const teamById: Record<string,any> = {};
+  teams.forEach(t => teamById[t.id] = t);
+
+  // Matches for current round
+  const currentMatches = (matches ?? []).filter((m:any) => m.round_num === curRound);
+  const displayRound   = curRound > 0 ? curRound : 1;
+  const displayMatches = currentMatches.length > 0 ? currentMatches : (matches ?? []).filter((m:any) => m.round_num === displayRound);
 
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <Nav onHome={onBack}/>
+
+      {/* Match detail modal */}
+      {selectedMatch && (
+        <MatchDetailModal
+          match={selectedMatch}
+          homeTeam={teamById[selectedMatch.home_id]}
+          awayTeam={teamById[selectedMatch.away_id]}
+          onClose={()=>setSelectedMatch(null)}
+        />
+      )}
 
       {/* Hero */}
       <div style={{background:"linear-gradient(180deg,rgba(212,165,55,0.08) 0%,transparent 100%)",borderBottom:"1px solid rgba(212,165,55,0.12)",padding:"32px 24px 28px",textAlign:"center"}}>
@@ -1467,10 +1621,12 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket }) {
         {/* Status pills */}
         <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap",marginBottom:20}}>
           {[
-            {label:"Registration",value:"OPEN",color:"#22C55E"},
-            {label:"Players Signed",value:`${totalFilled} / ${totalSlots}`,color:"#FBBF24"},
-            {label:"Full Squads",value:`${fullTeams} / 32`,color:"#A855F7"},
-            {label:"Deadline",value:"TBA via CT",color:"#60A5FA"},
+            { label:"Registration", value: status==="registration"?"OPEN":"CLOSED",
+              color: status==="registration"?"#22C55E":"#6B7280" },
+            { label:"Players Signed", value:`${totalFilled} / ${totalSlots}`, color:"#FBBF24" },
+            { label:"Full Squads",    value:`${fullTeams} / 32`,              color:"#A855F7" },
+            { label:"Status",         value: status==="complete"?"🏆 COMPLETE": isActive?`${ROUND_LABEL[curRound]||"Starting"}`: "TBA via CT",
+              color: status==="complete"?"#FBBF24": isActive?"#22C55E":"#60A5FA" },
           ].map(s=>(
             <div key={s.label} style={{padding:"8px 16px",borderRadius:10,background:"rgba(255,255,255,0.04)",border:`1px solid ${s.color}30`}}>
               <div style={{fontSize:14,fontWeight:800,color:s.color}}>{s.value}</div>
@@ -1491,68 +1647,165 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket }) {
         </div>
 
         <div style={{display:"flex",gap:12,justifyContent:"center",marginTop:20,flexWrap:"wrap"}}>
-          <button onClick={onBrowse} style={{padding:"11px 28px",fontSize:13,fontWeight:700,background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,color:"#1a1a1a",cursor:"pointer",boxShadow:"0 4px 16px rgba(212,165,55,0.3)"}}>
-            📋 Join a Team
-          </button>
+          {status==="registration" && (
+            <button onClick={onBrowse} style={{padding:"11px 28px",fontSize:13,fontWeight:700,background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,color:"#1a1a1a",cursor:"pointer",boxShadow:"0 4px 16px rgba(212,165,55,0.3)"}}>
+              📋 Join a Team
+            </button>
+          )}
           <button onClick={onBracket} style={{padding:"11px 28px",fontSize:13,fontWeight:700,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:10,color:"#fff",cursor:"pointer"}}>
             🗺️ View Full Bracket
           </button>
         </div>
       </div>
 
-      {/* Round headers */}
-      <div style={{maxWidth:900,margin:"0 auto",padding:"24px 20px"}}>
-        <div style={{display:"flex",gap:6,marginBottom:20,overflowX:"auto",paddingBottom:4}}>
-          {rounds.map((r,i)=>(
-            <div key={r} style={{flexShrink:0,padding:"6px 14px",borderRadius:8,background:i===0?"rgba(212,165,55,0.12)":"rgba(255,255,255,0.03)",border:i===0?"1px solid rgba(212,165,55,0.3)":"1px solid rgba(255,255,255,0.07)",fontSize:11,fontWeight:700,color:i===0?"#FBBF24":"rgba(255,255,255,0.35)",letterSpacing:0.5}}>
-              {r}
-            </div>
-          ))}
-        </div>
+      {/* Admin panel */}
+      <AdminPanel
+        tournament={tournament}
+        onSeed={onAdminSeed}
+        onSimulate={onAdminSimulate}
+        loading={adminLoading}
+      />
 
-        {/* Bracket grid — Round of 32 pairs */}
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.35)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>Round of 32 — Match Pairs</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
-            {bracket.map((m,i)=>(
-              <div key={i} style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,overflow:"hidden"}}>
-                <div style={{padding:"6px 12px",background:"rgba(255,255,255,0.03)",borderBottom:"1px solid rgba(255,255,255,0.05)",fontSize:9,color:"rgba(255,255,255,0.25)",fontWeight:700,letterSpacing:1}}>MATCH {i+1}</div>
-                {[m.home, m.away].map((team,side)=>(
-                  <div key={side} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:side===0?"1px solid rgba(255,255,255,0.05)":"none"}}>
-                    {team ? (
-                      <>
-                        <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${team.color}cc,${team.color}66)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}><EmblemImg team={team} size={18}/></div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:11,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team.name}</div>
-                          <div style={{fontSize:9,color:"rgba(255,255,255,0.3)"}}>{team.memberIds.length}/11 players</div>
-                        </div>
-                        {team.memberIds.length===11&&<div style={{fontSize:9,color:"#22C55E",fontWeight:700,flexShrink:0}}>✓</div>}
-                      </>
-                    ) : (
-                      <div style={{fontSize:11,color:"rgba(255,255,255,0.15)",fontStyle:"italic"}}>TBD</div>
-                    )}
+      {/* Matches section */}
+      <div style={{maxWidth:900,margin:"0 auto",padding:"0 20px 40px"}}>
+
+        {/* Round navigation pills */}
+        {isActive && (
+          <div style={{display:"flex",gap:6,marginBottom:20,overflowX:"auto",paddingBottom:4}}>
+            {[1,2,3,4,5].map(r=>{
+              const rMatches = (matches??[]).filter((m:any)=>m.round_num===r);
+              const done     = rMatches.every((m:any)=>m.status==="complete");
+              const active   = r===curRound;
+              return (
+                <div key={r} style={{flexShrink:0,padding:"6px 14px",borderRadius:8,
+                  background:active?"rgba(212,165,55,0.12)":done?"rgba(34,197,94,0.08)":"rgba(255,255,255,0.03)",
+                  border:active?"1px solid rgba(212,165,55,0.3)":done?"1px solid rgba(34,197,94,0.2)":"1px solid rgba(255,255,255,0.07)",
+                  fontSize:11,fontWeight:700,
+                  color:active?"#FBBF24":done?"#22C55E":"rgba(255,255,255,0.35)",
+                  letterSpacing:0.5}}>
+                  {ROUND_LABEL[r]}{done&&!active?" ✓":""}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Current round matches */}
+        {isActive && displayMatches.length > 0 && (
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.35)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>
+              {ROUND_LABEL[curRound] || "Matches"}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+              {displayMatches.map((m:any)=>{
+                const home    = teamById[m.home_id];
+                const away    = teamById[m.away_id];
+                const done    = m.status === "complete";
+                const winHome = done && m.winner_id === m.home_id;
+                const winAway = done && m.winner_id === m.away_id;
+                const penalty = done && m.home_pens !== null;
+                return (
+                  <div key={m.id} onClick={()=>done&&setSelectedMatch(m)} style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${done?"rgba(34,197,94,0.2)":"rgba(255,255,255,0.08)"}`,borderRadius:12,overflow:"hidden",cursor:done?"pointer":"default",transition:"all 0.2s"}}
+                    onMouseEnter={e=>{if(done)e.currentTarget.style.background="rgba(255,255,255,0.06)";}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.03)";}}>
+                    <div style={{padding:"6px 12px",background:"rgba(255,255,255,0.025)",borderBottom:"1px solid rgba(255,255,255,0.05)",fontSize:9,color:"rgba(255,255,255,0.25)",fontWeight:700,letterSpacing:1,display:"flex",justifyContent:"space-between"}}>
+                      <span>MATCH {m.match_num}</span>
+                      {done && <span style={{color:"#22C55E"}}>FT{penalty?" (P)":""}</span>}
+                    </div>
+                    {/* Home */}
+                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid rgba(255,255,255,0.04)",background:winHome?"rgba(34,197,94,0.06)":"transparent"}}>
+                      {home ? (
+                        <>
+                          <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${home.color}cc,${home.color}66)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}><EmblemImg team={home} size={18}/></div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:winHome?"#22C55E":"#fff"}}>{home.name}{winHome?" 🏆":""}</div>
+                            <div style={{fontSize:9,color:"rgba(255,255,255,0.25)"}}>{home.memberIds?.length??0}/11</div>
+                          </div>
+                          {done && <span style={{fontSize:22,fontWeight:900,color:winHome?"#22C55E":"rgba(255,255,255,0.5)",flexShrink:0}}>{m.home_score}</span>}
+                        </>
+                      ) : <span style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontStyle:"italic"}}>TBD</span>}
+                    </div>
+                    {/* Away */}
+                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:winAway?"rgba(34,197,94,0.06)":"transparent"}}>
+                      {away ? (
+                        <>
+                          <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${away.color}cc,${away.color}66)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}><EmblemImg team={away} size={18}/></div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:winAway?"#22C55E":"#fff"}}>{away.name}{winAway?" 🏆":""}</div>
+                            <div style={{fontSize:9,color:"rgba(255,255,255,0.25)"}}>{away.memberIds?.length??0}/11</div>
+                          </div>
+                          {done && <span style={{fontSize:22,fontWeight:900,color:winAway?"#22C55E":"rgba(255,255,255,0.5)",flexShrink:0}}>{m.away_score}</span>}
+                        </>
+                      ) : <span style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontStyle:"italic"}}>TBD</span>}
+                    </div>
+                    {done && <div style={{fontSize:9,color:"rgba(255,255,255,0.2)",textAlign:"center",padding:"4px 0"}}>Click for match report</div>}
                   </div>
-                ))}
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Registration view — show R32 preview pairs */}
+        {!isActive && (
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.35)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>Round of 32 — Teams</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
+              {Array.from({length:16},(_,i)=>({
+                home: teams[i*2]   || null,
+                away: teams[i*2+1] || null,
+              })).map((m,i)=>(
+                <div key={i} style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,overflow:"hidden"}}>
+                  <div style={{padding:"6px 12px",background:"rgba(255,255,255,0.03)",borderBottom:"1px solid rgba(255,255,255,0.05)",fontSize:9,color:"rgba(255,255,255,0.25)",fontWeight:700,letterSpacing:1}}>MATCH {i+1}</div>
+                  {[m.home, m.away].map((team,side)=>(
+                    <div key={side} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:side===0?"1px solid rgba(255,255,255,0.05)":"none"}}>
+                      {team ? (
+                        <>
+                          <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${team.color}cc,${team.color}66)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}><EmblemImg team={team} size={18}/></div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team.name}</div>
+                            <div style={{fontSize:9,color:"rgba(255,255,255,0.3)"}}>{team.memberIds.length}/11 players</div>
+                          </div>
+                          {team.memberIds.length===11&&<div style={{fontSize:9,color:"#22C55E",fontWeight:700,flexShrink:0}}>✓</div>}
+                        </>
+                      ) : (
+                        <div style={{fontSize:11,color:"rgba(255,255,255,0.15)",fontStyle:"italic"}}>TBD</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            {["Round of 16","Quarter Finals","Semi Finals","Final"].map(r=>(
+              <div key={r} style={{marginTop:14,padding:"14px 20px",borderRadius:10,background:"rgba(255,255,255,0.02)",border:"1px dashed rgba(255,255,255,0.06)",display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:16}}>🔒</span>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.3)"}}>{r}</div>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.2)"}}>Unlocks after registration closes</div>
+                </div>
               </div>
             ))}
           </div>
-        </div>
+        )}
 
-        {/* Later rounds — locked */}
-        {["Round of 16","Quarter Finals","Semi Finals","Final"].map(r=>(
-          <div key={r} style={{marginTop:24,padding:"18px 20px",borderRadius:12,background:"rgba(255,255,255,0.02)",border:"1px dashed rgba(255,255,255,0.07)",textAlign:"center"}}>
-            <div style={{fontSize:18,marginBottom:6}}>🔒</div>
-            <div style={{fontSize:13,fontWeight:700,color:"rgba(255,255,255,0.3)"}}>{r}</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.2)",marginTop:4}}>Unlocks after registration closes</div>
+        {/* Champion banner */}
+        {status === "complete" && tournament?.champion_id && teamById[tournament.champion_id] && (
+          <div style={{marginTop:28,padding:"24px",background:"linear-gradient(135deg,rgba(212,165,55,0.2),rgba(212,165,55,0.08))",border:"2px solid rgba(212,165,55,0.5)",borderRadius:16,textAlign:"center"}}>
+            <div style={{fontSize:40,marginBottom:8}}>🏆</div>
+            <div style={{fontSize:11,fontWeight:700,color:"rgba(212,165,55,0.6)",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>CT World Cup 2026 Champion</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
+              <div style={{width:48,height:48,borderRadius:12,background:teamById[tournament.champion_id].color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}><EmblemImg team={teamById[tournament.champion_id]} size={30}/></div>
+              <div style={{fontSize:26,fontWeight:900,color:"#FBBF24"}}>{teamById[tournament.champion_id].name}</div>
+            </div>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
 }
 
 // ─── BRACKET PAGE — SVG tournament map ───────────────────────
-function BracketPage({ teams, onBack }) {
+function BracketPage({ teams, onBack, tournament, matches }) {
   // ── Layout constants ──────────────────────────────────────
   const SW=1400, SH=710;          // SVG canvas
   const SLW=130, SLH=26, MG=4;   // slot width/height, match gap
@@ -1584,12 +1837,59 @@ function BracketPage({ teams, onBack }) {
   const LC = "rgba(255,255,255,0.18)";
   const GC = "rgba(212,165,55,0.45)";
 
+  // ── Tournament state ─────────────────────────────────────────
+  const isActive = tournament?.status && tournament.status !== "registration";
+  const seeding  = (tournament?.seeding ?? []) as string[];
+  const teamById: Record<string,any> = {};
+  teams.forEach((t:any) => teamById[t.id] = t);
+
+  // Resolve team to show per round/match
+  // For seeded bracket, seeding[i] is the team at position i
+  const seededTeam = (pos: number): any | null => {
+    const id = seeding[pos];
+    return id && id !== "bye" ? teamById[id] : null;
+  };
+
+  // Get winner of a specific match (round, matchNum)
+  const matchData  = (round: number, num: number) =>
+    (matches ?? []).find((m:any) => m.round_num === round && m.match_num === num) ?? null;
+  const winnerTeam = (round: number, num: number): any | null => {
+    const m = matchData(round, num);
+    return m?.winner_id ? teamById[m.winner_id] : null;
+  };
+  const matchScore = (round: number, num: number): string => {
+    const m = matchData(round, num);
+    if (!m || m.status !== "complete") return "";
+    const s = `${m.home_score}–${m.away_score}`;
+    return m.home_pens !== null ? `${s} (${m.home_pens}–${m.away_pens}p)` : s;
+  };
+
+  // Team to show in each bracket slot
+  // R32: use seeding; R16+: use winners of previous round
+  const slotTeam = (round: number, pos: number): any | null => {
+    if (!isActive) {
+      // Pre-seeding: show teams by position
+      const allTeams = [...teams];
+      if (round === 1) return allTeams[pos] ?? null;
+      return null;
+    }
+    if (round === 1) return seededTeam(pos);
+    // For later rounds, team = winner of the corresponding earlier match
+    const matchNum = Math.floor(pos / 2) + 1;
+    const side     = pos % 2; // 0=home, 1=away
+    const prevM    = matchData(round - 1, matchNum);
+    if (!prevM || prevM.status !== "complete") return null;
+    return side === 0
+      ? (teamById[prevM.home_id] === teamById[prevM.winner_id] ? teamById[prevM.home_id] : teamById[prevM.away_id])
+      : null; // winner goes to slot 0 of next round's match
+  };
+
   // ── Helpers ───────────────────────────────────────────────
-  const Slot = ({x, y, team, gold=false}) => (
+  const Slot = ({x, y, team, gold=false, winner=false}: any) => (
     <g>
       <rect x={x} y={y} width={SLW} height={SLH} rx={4}
-        fill={team ? `${team.color}20` : gold ? "rgba(212,165,55,0.08)" : "rgba(255,255,255,0.06)"}
-        stroke={team ? team.color+"70" : gold ? "rgba(212,165,55,0.35)" : "rgba(255,255,255,0.14)"}
+        fill={winner?"rgba(34,197,94,0.12)" : team ? `${team.color}20` : gold ? "rgba(212,165,55,0.08)" : "rgba(255,255,255,0.06)"}
+        stroke={winner?"rgba(34,197,94,0.5)" : team ? team.color+"70" : gold ? "rgba(212,165,55,0.35)" : "rgba(255,255,255,0.14)"}
         strokeWidth={team ? 1 : 0.6}/>
       {team ? <>
         {team.logoImg
@@ -1597,31 +1897,43 @@ function BracketPage({ teams, onBack }) {
           : <text x={x+5}  y={y+SLH/2} dominantBaseline="middle" fontSize={13}>{team.emblem}</text>
         }
         <text x={x+22} y={y+SLH/2} dominantBaseline="middle" fontFamily="'Segoe UI',system-ui,sans-serif"
-          fontSize={8.5} fontWeight={700} fill="#fff">
+          fontSize={8.5} fontWeight={700} fill={winner?"#22C55E":"#fff"}>
           {team.name.length>15 ? team.name.slice(0,15)+"…" : team.name}
         </text>
         <text x={x+SLW-4} y={y+SLH/2} dominantBaseline="middle" textAnchor="end"
-          fontFamily="'Segoe UI',system-ui,sans-serif" fontSize={7} fill={team.color}>{team.memberIds.length}/11</text>
+          fontFamily="'Segoe UI',system-ui,sans-serif" fontSize={7} fill={team.color}>{team.memberIds?.length ?? 0}/11</text>
       </> : <>
         <text x={x+SLW/2} y={y+SLH/2} dominantBaseline="middle" textAnchor="middle"
           fontFamily="'Segoe UI',system-ui,sans-serif" fontSize={7.5} fill={gold?"rgba(212,165,55,0.4)":"rgba(255,255,255,0.2)"}>
-          {gold ? "TBD" : "TBD"}
+          TBD
         </text>
       </>}
     </g>
   );
 
-  const Match = ({x, top, t1, t2, gold=false}) => (
-    <g>
-      <Slot x={x} y={top}        team={t1} gold={gold}/>
-      <Slot x={x} y={top+SLH+MG} team={t2} gold={gold}/>
-    </g>
-  );
+  // Match block: shows t1 vs t2 and score if played
+  const Match = ({x, top, t1, t2, gold=false, round=0, matchNum=0}: any) => {
+    const m     = round > 0 ? matchData(round, matchNum) : null;
+    const done  = m?.status === "complete";
+    const wId   = m?.winner_id;
+    return (
+      <g>
+        <Slot x={x} y={top}        team={t1} gold={gold} winner={done && wId === t1?.id}/>
+        <Slot x={x} y={top+SLH+MG} team={t2} gold={gold} winner={done && wId === t2?.id}/>
+        {done && (
+          <text x={x + SLW/2} y={top + SLH + MG + SLH + 9} textAnchor="middle"
+            fontFamily="'Segoe UI',system-ui,sans-serif" fontSize={7} fill="rgba(34,197,94,0.7)" fontWeight={700}>
+            {matchScore(round, matchNum)}
+          </text>
+        )}
+      </g>
+    );
+  };
 
   // Left bracket connectors: right side exits, left side entries
-  const LConn = ({r, fromC, toC}) => {
+  const LConn = ({r, fromC, toC}: any) => {
     const mx=lMid(r), x0=Lx[r]+SLW, x1=Lx[r+1];
-    return fromC.reduce((acc,_,i) => {
+    return fromC.reduce((acc: any[],_: any,i: number) => {
       if (i%2!==0) return acc;
       const c0=fromC[i], c1=fromC[i+1], tc=toC[i/2];
       acc.push(<path key={i} d={`M${x0},${c0} H${mx} V${c1} M${x0},${c1} H${mx} M${mx},${tc} H${x1}`}
@@ -1631,9 +1943,9 @@ function BracketPage({ teams, onBack }) {
   };
 
   // Right bracket connectors: left side exits, right side entries
-  const RConn = ({r, fromC, toC}) => {
+  const RConn = ({r, fromC, toC}: any) => {
     const mx=rMid(r), x0=Rx[r], x1=Rx[r+1]+SLW;
-    return fromC.reduce((acc,_,i) => {
+    return fromC.reduce((acc: any[],_: any,i: number) => {
       if (i%2!==0) return acc;
       const c0=fromC[i], c1=fromC[i+1], tc=toC[i/2];
       acc.push(<path key={i} d={`M${x0},${c0} H${mx} V${c1} M${x0},${c1} H${mx} M${mx},${tc} H${x1}`}
@@ -1642,16 +1954,40 @@ function BracketPage({ teams, onBack }) {
     },[]);
   };
 
-  const L = teams.slice(0,16);   // left half
-  const R = teams.slice(16,32);  // right half
+  // In seeded bracket: left half = positions 0-15, right half = 16-31
+  // Each R32 match: position 2i vs 2i+1
+  // R16 winner = winner of R32 match i faces winner of R32 match i+1 (for L: matches 1-8, R: matches 9-16)
+  const L = isActive
+    ? Array.from({length:16}, (_,i) => seededTeam(i))
+    : teams.slice(0,16);
+  const R = isActive
+    ? Array.from({length:16}, (_,i) => seededTeam(i+16))
+    : teams.slice(16,32);
+
+  // Compute winners for each round column
+  const lR32Winners  = Array.from({length:8},  (_,i) => winnerTeam(1, i+1));
+  const lR16Winners  = Array.from({length:4},  (_,i) => winnerTeam(2, i+1));
+  const lQFWinners   = Array.from({length:2},  (_,i) => winnerTeam(3, i+1));
+  const lSFWinner    = winnerTeam(4, 1);
+  const rR32Winners  = Array.from({length:8},  (_,i) => winnerTeam(1, i+9));
+  const rR16Winners  = Array.from({length:4},  (_,i) => winnerTeam(2, i+5));
+  const rQFWinners   = Array.from({length:2},  (_,i) => winnerTeam(3, i+3));
+  const rSFWinner    = winnerTeam(4, 2);
+  const champion     = winnerTeam(5, 1);
 
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <Nav onHome={onBack}/>
       <div style={{padding:"16px 20px 40px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
           <h2 style={{fontSize:20,fontWeight:900,margin:0}}>🏆 CT World Cup 2026 — Full Bracket</h2>
-          <span style={{fontSize:10,padding:"3px 10px",borderRadius:6,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.25)",color:"#22C55E",fontWeight:700,letterSpacing:1}}>REGISTRATION OPEN</span>
+          <span style={{fontSize:10,padding:"3px 10px",borderRadius:6,
+            background: isActive?"rgba(212,165,55,0.1)":"rgba(34,197,94,0.1)",
+            border: isActive?"1px solid rgba(212,165,55,0.3)":"1px solid rgba(34,197,94,0.25)",
+            color: isActive?"#FBBF24":"#22C55E",
+            fontWeight:700,letterSpacing:1}}>
+            {tournament?.status === "complete" ? "🏆 COMPLETE" : isActive ? "LIVE" : "REGISTRATION OPEN"}
+          </span>
         </div>
         <div style={{overflowX:"auto",borderRadius:12}}>
           <svg viewBox={`0 0 ${SW} ${SH}`} style={{width:"100%",minWidth:680,height:"auto",display:"block"}}
@@ -1669,11 +2005,9 @@ function BracketPage({ teams, onBack }) {
 
             {/* ── Background ── */}
             <rect width={SW} height={SH} fill="url(#pitchBg)" rx={10}/>
-            {/* Pitch stripes */}
             {Array.from({length:14},(_,i)=>(
               <rect key={i} x={i*(SW/14)} y={0} width={SW/28} height={SH} fill="rgba(255,255,255,0.016)"/>
             ))}
-            {/* Perspective lines from centre */}
             {[-6,-4,-2,0,2,4,6].map((d,i)=>(
               <line key={i} x1={SW/2} y1={SH*0.45} x2={SW/2+d*SW*0.15} y2={SH}
                 stroke="rgba(255,255,255,0.025)" strokeWidth={1}/>
@@ -1692,12 +2026,21 @@ function BracketPage({ teams, onBack }) {
               </g>
             ))}
 
-            {/* ── Trophy & labels ── */}
+            {/* ── Trophy & champion ── */}
             <text x={SW/2} y={28} textAnchor="middle" fontSize={30}>🏆</text>
-            <text x={SW/2} y={52} textAnchor="middle" fontFamily="'Segoe UI',system-ui"
-              fontSize={9} fontWeight={900} fill="#FBBF24" letterSpacing={4}>WINNER</text>
-            {/* Line from final winner slot up to trophy */}
-            <line x1={FX+SLW/2} y1={finT} x2={SW/2} y2={56}
+            {champion ? (
+              <>
+                <rect x={FX-10} y={56} width={SLW+20} height={16} rx={4} fill="rgba(212,165,55,0.2)" stroke="rgba(212,165,55,0.5)" strokeWidth={1}/>
+                <text x={SW/2} y={66} textAnchor="middle" fontFamily="'Segoe UI',system-ui"
+                  fontSize={8} fontWeight={900} fill="#FBBF24">
+                  {champion.name.length > 18 ? champion.name.slice(0,18)+"…" : champion.name}
+                </text>
+              </>
+            ) : (
+              <text x={SW/2} y={52} textAnchor="middle" fontFamily="'Segoe UI',system-ui"
+                fontSize={9} fontWeight={900} fill="#FBBF24" letterSpacing={4}>WINNER</text>
+            )}
+            <line x1={FX+SLW/2} y1={finT} x2={SW/2} y2={74}
               stroke={GC} strokeWidth={1.5} strokeDasharray="5 3"/>
             <text x={SW/2} y={finT+UNIT+11} textAnchor="middle"
               fontFamily="'Segoe UI',system-ui" fontSize={8.5} fontWeight={800}
@@ -1707,55 +2050,71 @@ function BracketPage({ teams, onBack }) {
               fill="rgba(255,255,255,0.35)" letterSpacing={1.5}>3rd Place</text>
 
             {/* ══ LEFT BRACKET ══ */}
-            {/* R32 */}
+            {/* R32 — left half: matches 1–8 */}
             {Array.from({length:8},(_,i)=>(
-              <Match key={i} x={Lx[0]} top={r32T[i]} t1={L[i*2]||null} t2={L[i*2+1]||null}/>
+              <Match key={i} x={Lx[0]} top={r32T[i]}
+                t1={L[i*2]||null} t2={L[i*2+1]||null}
+                round={1} matchNum={i+1}/>
             ))}
             <LConn r={0} fromC={r32C} toC={r16C}/>
 
-            {/* R16 */}
+            {/* R16 — left half: matches 1–4 */}
             {Array.from({length:4},(_,i)=>(
-              <Match key={i} x={Lx[1]} top={r16T[i]} t1={null} t2={null}/>
+              <Match key={i} x={Lx[1]} top={r16T[i]}
+                t1={lR32Winners[i*2]||null} t2={lR32Winners[i*2+1]||null}
+                round={2} matchNum={i+1}/>
             ))}
             <LConn r={1} fromC={r16C} toC={qfC}/>
 
-            {/* QF */}
+            {/* QF — left half: matches 1–2 */}
             {Array.from({length:2},(_,i)=>(
-              <Match key={i} x={Lx[2]} top={qfT[i]} t1={null} t2={null}/>
+              <Match key={i} x={Lx[2]} top={qfT[i]}
+                t1={lR16Winners[i*2]||null} t2={lR16Winners[i*2+1]||null}
+                round={3} matchNum={i+1}/>
             ))}
             <LConn r={2} fromC={qfC} toC={[sfC]}/>
 
-            {/* SF */}
-            <Match x={Lx[3]} top={sfT} t1={null} t2={null}/>
-            {/* SF → Final */}
+            {/* SF — left: match 1 */}
+            <Match x={Lx[3]} top={sfT}
+              t1={lQFWinners[0]||null} t2={lQFWinners[1]||null}
+              round={4} matchNum={1}/>
             <path d={`M${Lx[3]+SLW},${sfC} H${FX}`} fill="none" stroke={GC} strokeWidth={1.5}/>
 
             {/* ══ RIGHT BRACKET ══ */}
-            {/* R32 */}
+            {/* R32 — right half: matches 9–16 */}
             {Array.from({length:8},(_,i)=>(
-              <Match key={i} x={Rx[0]} top={r32T[i]} t1={R[i*2]||null} t2={R[i*2+1]||null}/>
+              <Match key={i} x={Rx[0]} top={r32T[i]}
+                t1={R[i*2]||null} t2={R[i*2+1]||null}
+                round={1} matchNum={i+9}/>
             ))}
             <RConn r={0} fromC={r32C} toC={r16C}/>
 
-            {/* R16 */}
+            {/* R16 — right half: matches 5–8 */}
             {Array.from({length:4},(_,i)=>(
-              <Match key={i} x={Rx[1]} top={r16T[i]} t1={null} t2={null}/>
+              <Match key={i} x={Rx[1]} top={r16T[i]}
+                t1={rR32Winners[i*2]||null} t2={rR32Winners[i*2+1]||null}
+                round={2} matchNum={i+5}/>
             ))}
             <RConn r={1} fromC={r16C} toC={qfC}/>
 
-            {/* QF */}
+            {/* QF — right half: matches 3–4 */}
             {Array.from({length:2},(_,i)=>(
-              <Match key={i} x={Rx[2]} top={qfT[i]} t1={null} t2={null}/>
+              <Match key={i} x={Rx[2]} top={qfT[i]}
+                t1={rR16Winners[i*2]||null} t2={rR16Winners[i*2+1]||null}
+                round={3} matchNum={i+3}/>
             ))}
             <RConn r={2} fromC={qfC} toC={[sfC]}/>
 
-            {/* SF */}
-            <Match x={Rx[3]} top={sfT} t1={null} t2={null}/>
-            {/* SF → Final */}
+            {/* SF — right: match 2 */}
+            <Match x={Rx[3]} top={sfT}
+              t1={rQFWinners[0]||null} t2={rQFWinners[1]||null}
+              round={4} matchNum={2}/>
             <path d={`M${Rx[3]},${sfC} H${FX+SLW}`} fill="none" stroke={GC} strokeWidth={1.5}/>
 
             {/* ══ FINAL ══ */}
-            <Match x={FX} top={finT} t1={null} t2={null} gold={true}/>
+            <Match x={FX} top={finT}
+              t1={lSFWinner||null} t2={rSFWinner||null}
+              gold={true} round={5} matchNum={1}/>
 
             {/* ══ 3RD PLACE ══ */}
             <Match x={FX} top={trdT} t1={null} t2={null}/>
@@ -1764,14 +2123,14 @@ function BracketPage({ teams, onBack }) {
         </div>
         {/* Legend */}
         <div style={{display:"flex",gap:20,marginTop:14,flexWrap:"wrap"}}>
-          {[{c:LC,l:"Round connector"},{c:GC,l:"Final path"},{c:"rgba(34,197,94,0.7)",l:"Full squad"}].map(({c,l})=>(
+          {[{c:LC,l:"Round connector"},{c:GC,l:"Final path"},{c:"rgba(34,197,94,0.7)",l:"Winner"}].map(({c,l})=>(
             <div key={l} style={{display:"flex",alignItems:"center",gap:6}}>
               <div style={{width:18,height:2,background:c,borderRadius:1}}/>
               <span style={{fontSize:10,color:"rgba(255,255,255,0.35)"}}>{l}</span>
             </div>
           ))}
           <span style={{fontSize:10,color:"rgba(255,255,255,0.25)",marginLeft:"auto"}}>
-            Bracket seeded at registration deadline — announced via CT
+            {isActive ? "Live bracket — winners advance automatically" : "Bracket seeded at registration deadline"}
           </span>
         </div>
       </div>
@@ -1800,8 +2159,23 @@ export default function CTWCApp() {
     try { return typeof window !== "undefined" && !!localStorage.getItem("ctwc_handle"); }
     catch { return false; }
   });
+  const [tournament,    setTournament]    = useState<any>(null);
+  const [matchResults,  setMatchResults]  = useState<any[]>([]);
+  const [adminLoading,  setAdminLoading]  = useState(false);
 
   const supabase = createClient();
+
+  // ── Load tournament state ────────────────────────────────────
+  const loadTournament = async () => {
+    try {
+      const res = await fetch("/api/tournament/state");
+      if (res.ok) {
+        const data = await res.json();
+        setTournament(data.tournament ?? null);
+        setMatchResults(data.matches ?? []);
+      }
+    } catch { /* tournament tables may not exist yet — silent */ }
+  };
 
   // ── Load data from Supabase ──────────────────────────────────
   const loadData = async () => {
@@ -1817,7 +2191,7 @@ export default function CTWCApp() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); loadTournament(); }, []);
 
   // ── Init: OAuth redirect + session restore from localStorage ──
   useEffect(() => {
@@ -1957,6 +2331,44 @@ export default function CTWCApp() {
     setPage("teamPage");
   };
 
+  // ── Admin: seed bracket ───────────────────────────────────────
+  const handleAdminSeed = async (pin: string): Promise<string> => {
+    setAdminLoading(true);
+    try {
+      const res = await fetch("/api/tournament/seed", {
+        method: "POST",
+        headers: { "x-admin-pin": pin },
+      });
+      const data = await res.json();
+      if (!res.ok) return `Error: ${data.error ?? res.statusText}`;
+      await loadTournament();
+      return `✓ Bracket seeded! ${data.matchCount} R32 matches created.`;
+    } catch (e) {
+      return "Network error";
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  // ── Admin: simulate current round ─────────────────────────────
+  const handleAdminSimulate = async (pin: string): Promise<string> => {
+    setAdminLoading(true);
+    try {
+      const res = await fetch("/api/tournament/simulate", {
+        method: "POST",
+        headers: { "x-admin-pin": pin },
+      });
+      const data = await res.json();
+      if (!res.ok) return `Error: ${data.error ?? res.statusText}`;
+      await loadTournament();
+      return data.message ?? "Round simulated!";
+    } catch (e) {
+      return "Network error";
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ minHeight:"100vh", background:"#070B14", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16, fontFamily:"'Segoe UI',system-ui,sans-serif" }}>
@@ -2012,8 +2424,8 @@ export default function CTWCApp() {
       {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
       {page==="pool"        && <PlayerPool pool={pool} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="teamsList"   && <TeamsListPage teams={teams} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
-      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")}/>}
-      {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")}/>}
+      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} adminLoading={adminLoading}/>}
+      {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
     </div>
   );
 }
