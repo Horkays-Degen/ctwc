@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-server";
 import { simulateMatch, ROUND_MATCHES } from "@/lib/match-engine";
+import { refreshCardStats } from "@/lib/refresh-stats";
 
 const ADMIN_PIN = process.env.ADMIN_PIN ?? "ctwc2026";
 
@@ -49,10 +50,14 @@ export async function POST(req: NextRequest) {
     roundMatches.flatMap((m: any) => [m.home_id, m.away_id].filter(Boolean))
   ));
 
-  const { data: cards } = await supabase
+  const { data: rawCards } = await supabase
     .from("cards")
-    .select("id,x_handle,display_name,team_id,position,stats,ovr")
+    .select("id,x_handle,display_name,avatar_url,team_id,position,stats,ovr,tier,followers,following,listed_count,tweet_count,verified")
     .in("team_id", teamIds);
+
+  // ── Refresh stats from live Twitter data before simulating ─────
+  // This is the core CTWC mechanic: who's hot on CT right now wins.
+  const cards = await refreshCardStats(rawCards ?? []);
 
   // Group cards by team
   const cardsByTeam: Record<string, any[]> = {};
@@ -118,9 +123,10 @@ export async function POST(req: NextRequest) {
         winner_id:  result.winnerId,
         status:     "complete",
         match_data: {
-          events:       result.events,
-          homeStrength: result.homeStrength,
-          awayStrength: result.awayStrength,
+          events:        result.events,
+          homeStrength:  result.homeStrength,
+          awayStrength:  result.awayStrength,
+          statsRefreshed: !!process.env.X_API_BEARER_TOKEN,
         },
         played_at: new Date().toISOString(),
       })
@@ -193,6 +199,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     results,
     nextRound,
+    statsRefreshed: !!process.env.X_API_BEARER_TOKEN,
     message: `Round ${round} complete. Moving to round ${nextRound}.`,
   });
 }
