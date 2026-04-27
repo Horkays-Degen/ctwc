@@ -983,90 +983,171 @@ function Nav({ onHome, right = null }: { onHome: any; right?: any }) {
 // ─── LANDING ──────────────────────────────────────────────────
 function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard, onMyTeam, sessionLoading, totalClaimed }) {
   const [hov, setHov] = useState(false);
-  const preview = useRef([createCard(MOCK_PROFILES[1],"ST"), createCard(MOCK_PROFILES[7],"CM")]).current;
+  const preview = useRef([
+    createCard(MOCK_PROFILES[1],"ST"),
+    createCard(MOCK_PROFILES[7],"CM"),
+    createCard(MOCK_PROFILES[3],"GK"),
+  ]).current;
   const totalSigned = teams.reduce((s,t)=>s+t.memberIds.length,0);
   const fullTeams   = teams.filter(t=>t.memberIds.length===11).length;
+  const pct = Math.min(Math.round((totalClaimed/POOL_CAP)*100),100);
+
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif",position:"relative",overflow:"hidden",display:"flex",flexDirection:"column"}}>
-      <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
-        <div style={{position:"absolute",top:-180,right:-80,width:480,height:480,borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.055) 0%,transparent 70%)"}}/>
-        <div style={{position:"absolute",bottom:-120,left:-100,width:380,height:380,borderRadius:"50%",background:"radial-gradient(circle,rgba(168,85,247,0.045) 0%,transparent 70%)"}}/>
-        <div style={{position:"absolute",inset:0,opacity:0.022,backgroundImage:"linear-gradient(rgba(255,255,255,0.08) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.08) 1px,transparent 1px)",backgroundSize:"52px 52px"}}/>
+
+      {/* ── Animated background ── */}
+      <div style={{position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:"-10%",right:"-5%",width:700,height:700,borderRadius:"50%",background:"radial-gradient(circle,rgba(212,165,55,0.07) 0%,transparent 65%)",animation:"orbFloat 14s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",bottom:"-20%",left:"-8%",width:550,height:550,borderRadius:"50%",background:"radial-gradient(circle,rgba(168,85,247,0.06) 0%,transparent 65%)",animation:"orbFloat 18s ease-in-out infinite reverse"}}/>
+        <div style={{position:"absolute",top:"35%",left:"45%",width:400,height:400,borderRadius:"50%",background:"radial-gradient(circle,rgba(59,130,246,0.04) 0%,transparent 65%)",animation:"orbFloat 22s ease-in-out infinite"}}/>
+        <div style={{position:"absolute",inset:0,opacity:0.025,backgroundImage:"linear-gradient(rgba(255,255,255,0.12) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.12) 1px,transparent 1px)",backgroundSize:"60px 60px"}}/>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:1,background:"linear-gradient(90deg,transparent 0%,rgba(212,165,55,0.25) 50%,transparent 100%)"}}/>
       </div>
-      <header style={{padding:"18px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid rgba(255,255,255,0.05)",position:"relative",zIndex:10}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:32,height:32,borderRadius:8,background:"linear-gradient(135deg,#D4A537,#FBBF24)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#1a1a1a"}}>CT</div>
-          <span style={{fontSize:18,fontWeight:800,letterSpacing:1}}>CT<span style={{color:"#FBBF24"}}>WC</span></span>
+
+      {/* ── Header ── */}
+      <header style={{padding:"18px 28px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid rgba(255,255,255,0.05)",position:"relative",zIndex:10,backdropFilter:"blur(8px)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,#D4A537,#FBBF24)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:"#1a1a1a",boxShadow:"0 0 18px rgba(212,165,55,0.35)"}}>CT</div>
+          <span style={{fontSize:20,fontWeight:900,letterSpacing:0.5}}>CT<span style={{color:"#FBBF24"}}>WC</span></span>
+          <div style={{padding:"2px 9px",borderRadius:20,background:"rgba(34,197,94,0.1)",border:"1px solid rgba(34,197,94,0.25)",fontSize:9,fontWeight:700,color:"#22C55E",letterSpacing:1.5}}>LIVE</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          <button onClick={onPool}       style={{background:"transparent",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.6)",borderRadius:7,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>Pool ({pool.length})</button>
-          <button onClick={onTeams}      style={{background:"transparent",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.6)",borderRadius:7,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>Teams</button>
-          <button onClick={onTournament} style={{background:"rgba(212,165,55,0.1)",border:"1px solid rgba(212,165,55,0.25)",color:"#FBBF24",borderRadius:7,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>🏆 Tournament</button>
+          <button onClick={onPool} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.55)",borderRadius:8,padding:"7px 15px",cursor:"pointer",fontSize:12,fontWeight:600,transition:"all 0.2s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.2)";e.currentTarget.style.color="rgba(255,255,255,0.9)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.08)";e.currentTarget.style.color="rgba(255,255,255,0.55)";}}>Pool ({pool.length})</button>
+          <button onClick={onTeams} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.55)",borderRadius:8,padding:"7px 15px",cursor:"pointer",fontSize:12,fontWeight:600,transition:"all 0.2s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.2)";e.currentTarget.style.color="rgba(255,255,255,0.9)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.08)";e.currentTarget.style.color="rgba(255,255,255,0.55)";}}>Teams</button>
+          <button onClick={onTournament} style={{background:"rgba(212,165,55,0.12)",border:"1px solid rgba(212,165,55,0.3)",color:"#FBBF24",borderRadius:8,padding:"7px 15px",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all 0.2s",boxShadow:"0 0 12px rgba(212,165,55,0.08)"}}
+            onMouseEnter={e=>{e.currentTarget.style.background="rgba(212,165,55,0.22)";e.currentTarget.style.boxShadow="0 0 22px rgba(212,165,55,0.22)";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="rgba(212,165,55,0.12)";e.currentTarget.style.boxShadow="0 0 12px rgba(212,165,55,0.08)";}}>🏆 Tournament</button>
         </div>
       </header>
-      <main style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"28px",position:"relative",zIndex:10}}>
-        <div style={{display:"flex",alignItems:"center",gap:64,maxWidth:1060,width:"100%",flexWrap:"wrap",justifyContent:"center"}}>
-          <div style={{flex:"1 1 360px",maxWidth:490}}>
-            <div style={{display:"inline-block",padding:"5px 13px",borderRadius:20,background:"rgba(212,165,55,0.1)",border:"1px solid rgba(212,165,55,0.18)",fontSize:10,fontWeight:700,color:"#FBBF24",marginBottom:20,letterSpacing:1.5}}>SEASON 1 — REGISTRATION OPEN</div>
-            <h1 style={{fontSize:46,fontWeight:900,lineHeight:1.07,margin:0,letterSpacing:-1}}>Crypto Twitter.<br/><span style={{background:"linear-gradient(90deg,#FBBF24,#D4A537,#F59E0B)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>World Cup Cards.</span></h1>
-            <p style={{fontSize:15,color:"rgba(255,255,255,0.48)",lineHeight:1.68,margin:"20px 0 30px",maxWidth:410}}>Claim your card. Join one of 32 teams. 400 spots total. Tournament kicks off when registration closes.</p>
+
+      {/* ── Hero ── */}
+      <main style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"52px 28px 36px",position:"relative",zIndex:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:80,maxWidth:1120,width:"100%",flexWrap:"wrap",justifyContent:"center"}}>
+
+          {/* Copy */}
+          <div style={{flex:"1 1 380px",maxWidth:530,animation:"fadeUp 0.6s ease both"}}>
+            <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"5px 14px",borderRadius:20,background:"rgba(212,165,55,0.08)",border:"1px solid rgba(212,165,55,0.2)",fontSize:10,fontWeight:700,color:"#FBBF24",marginBottom:26,letterSpacing:2}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:"#22C55E",boxShadow:"0 0 6px #22C55E",display:"inline-block",animation:"ppulse 2s ease-in-out infinite"}}/>
+              SEASON 1 · REGISTRATION OPEN
+            </div>
+
+            <h1 style={{fontSize:64,fontWeight:900,lineHeight:1.03,margin:"0 0 8px",letterSpacing:-2.5}}>
+              Crypto Twitter.<br/>
+              <span style={{background:"linear-gradient(90deg,#FBBF24 0%,#F59E0B 45%,#D4A537 100%)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",filter:"drop-shadow(0 0 32px rgba(212,165,55,0.28))"}}>World Cup.</span>
+            </h1>
+
+            <p style={{fontSize:16,color:"rgba(255,255,255,0.42)",lineHeight:1.72,margin:"22px 0 34px",maxWidth:430}}>
+              Your CT stats become your player card. Join one of 32 teams. The tournament runs on real engagement — tweet more, win more.
+            </p>
+
             {sessionLoading ? (
-              <button disabled style={{padding:"14px 32px",fontSize:14,fontWeight:700,color:"rgba(26,26,26,0.6)",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,cursor:"default",opacity:0.7,display:"flex",alignItems:"center",gap:9}}>
-                <span style={{width:14,height:14,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:"#1a1a1a",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>
+              <button disabled style={{padding:"16px 36px",fontSize:15,fontWeight:700,color:"rgba(26,26,26,0.6)",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:12,cursor:"default",opacity:0.7,display:"inline-flex",alignItems:"center",gap:10}}>
+                <span style={{width:16,height:16,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:"#1a1a1a",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>
                 Loading session...
               </button>
             ) : myCard ? (
-              <button onClick={()=>{SFX.click();onMyTeam();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)} style={{padding:"14px 32px",fontSize:14,fontWeight:700,color:"#1a1a1a",background:hov?"linear-gradient(135deg,#F59E0B,#D4A537)":"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,cursor:"pointer",boxShadow:hov?"0 0 26px rgba(212,165,55,0.45)":"0 4px 14px rgba(212,165,55,0.22)",transition:"all 0.3s",display:"flex",alignItems:"center",gap:9}}>
-                ⚽ Go to My Team — OVR {myCard.ovr}
+              <button onClick={()=>{SFX.click();onMyTeam();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+                style={{padding:"16px 36px",fontSize:15,fontWeight:700,color:"#1a1a1a",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:12,cursor:"pointer",
+                  boxShadow:hov?"0 0 44px rgba(212,165,55,0.55),0 8px 24px rgba(212,165,55,0.3)":"0 4px 20px rgba(212,165,55,0.22)",
+                  transform:hov?"translateY(-2px)":"translateY(0)",transition:"all 0.25s",display:"inline-flex",alignItems:"center",gap:10}}>
+                ⚽ My Team · OVR {myCard.ovr}
               </button>
             ) : (
-              <button onClick={()=>{SFX.click();onConnect();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)} style={{padding:"14px 32px",fontSize:14,fontWeight:700,color:"#1a1a1a",background:hov?"linear-gradient(135deg,#F59E0B,#D4A537)":"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:10,cursor:"pointer",boxShadow:hov?"0 0 26px rgba(212,165,55,0.45)":"0 4px 14px rgba(212,165,55,0.22)",transition:"all 0.3s",display:"flex",alignItems:"center",gap:9}}>
-                <span style={{fontSize:17}}>𝕏</span> Connect & Claim Your Card
+              <button onClick={()=>{SFX.click();onConnect();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+                style={{padding:"16px 36px",fontSize:15,fontWeight:700,color:"#1a1a1a",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:12,cursor:"pointer",
+                  boxShadow:hov?"0 0 44px rgba(212,165,55,0.55),0 8px 24px rgba(212,165,55,0.3)":"0 4px 20px rgba(212,165,55,0.22)",
+                  transform:hov?"translateY(-2px)":"translateY(0)",transition:"all 0.25s",display:"inline-flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:18}}>𝕏</span> Connect & Claim Your Card
               </button>
             )}
+
             {/* Live stats */}
-            <div style={{display:"flex",gap:24,marginTop:32,flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:32,marginTop:38,paddingTop:30,borderTop:"1px solid rgba(255,255,255,0.07)",flexWrap:"wrap"}}>
               {[
-                {v:totalClaimed, l:"Cards Claimed"},
-                {v:`${totalSigned}/${teams.length*11}`, l:"Spots Filled"},
-                {v:`${fullTeams}/32`, l:"Full Squads"},
+                {v:totalClaimed,     l:"Cards Claimed",  c:"#FBBF24"},
+                {v:totalSigned,      l:"Players Signed", c:"#22C55E"},
+                {v:`${fullTeams}/32`,l:"Full Squads",    c:"#A855F7"},
               ].map(s=>(
-                <div key={s.l}><div style={{fontSize:19,fontWeight:800,color:"#fff"}}>{s.v}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.32)",letterSpacing:1.2,textTransform:"uppercase"}}>{s.l}</div></div>
+                <div key={s.l}>
+                  <div style={{fontSize:28,fontWeight:900,color:s.c,lineHeight:1,letterSpacing:-0.5}}>{s.v}</div>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginTop:5}}>{s.l}</div>
+                </div>
               ))}
             </div>
+
             {/* Pool fill bar */}
-            <div style={{marginTop:18,maxWidth:340}}>
-              <div style={{height:3,background:"rgba(255,255,255,0.06)",borderRadius:2,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${Math.min((totalClaimed/POOL_CAP)*100,100)}%`,background:"linear-gradient(90deg,#9945FF,#FBBF24)",borderRadius:2,transition:"width 0.5s"}}/>
+            <div style={{marginTop:18,maxWidth:360}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                <span style={{fontSize:9,color:"rgba(255,255,255,0.22)",letterSpacing:1.5}}>{POOL_CAP-totalClaimed} SPOTS REMAINING</span>
+                <span style={{fontSize:9,color:"rgba(255,255,255,0.4)",fontWeight:700}}>{pct}% FULL</span>
               </div>
-              <div style={{fontSize:9,color:"rgba(255,255,255,0.25)",marginTop:4,letterSpacing:1}}>{POOL_CAP - totalClaimed} OF {POOL_CAP} SPOTS REMAINING</div>
+              <div style={{height:4,background:"rgba(255,255,255,0.05)",borderRadius:2,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${pct}%`,background:"linear-gradient(90deg,#9945FF,#FBBF24)",borderRadius:2,transition:"width 0.6s",boxShadow:"0 0 8px rgba(212,165,55,0.4)"}}/>
+              </div>
             </div>
           </div>
-          <div style={{flex:"0 0 auto",position:"relative",height:340,width:280}}>
-            <div style={{position:"absolute",top:28,left:-18,transform:"rotate(-7deg)",zIndex:1}}><ShieldCard card={preview[0]} size="small"/></div>
-            <div style={{position:"absolute",top:0,left:68,transform:"rotate(4deg)",zIndex:2}}><ShieldCard card={preview[1]} size="small"/></div>
+
+          {/* Card fan */}
+          <div style={{flex:"0 0 auto",position:"relative",height:400,width:330,perspective:"900px",animation:"fadeUp 0.7s 0.15s ease both"}}>
+            <div style={{position:"absolute",top:50,left:0,transform:"rotate(-11deg) translateZ(-10px)",zIndex:1,opacity:0.75,filter:"blur(0.3px)"}}>
+              <ShieldCard card={preview[2]} size="small"/>
+            </div>
+            <div style={{position:"absolute",top:20,left:46,transform:"rotate(-4deg)",zIndex:2,animation:"packFloat 7s ease-in-out infinite"}}>
+              <ShieldCard card={preview[0]} size="small"/>
+            </div>
+            <div style={{position:"absolute",top:0,left:112,transform:"rotate(7deg)",zIndex:3,animation:"packFloat 9s ease-in-out infinite reverse"}}>
+              <ShieldCard card={preview[1]} size="small"/>
+            </div>
+            <div style={{position:"absolute",bottom:-10,left:"50%",transform:"translateX(-50%)",width:220,height:60,background:"radial-gradient(ellipse,rgba(212,165,55,0.18),transparent)",filter:"blur(24px)"}}/>
           </div>
         </div>
       </main>
-      {/* 32 teams scroll strip */}
-      <div style={{padding:"14px 0",borderTop:"1px solid rgba(255,255,255,0.05)",overflowX:"auto",position:"relative",zIndex:10}}>
-        <div style={{display:"flex",gap:10,paddingLeft:24,paddingRight:24,width:"max-content"}}>
-          {teams.map(t=>(
-            <div key={t.id} onClick={onTournament} style={{display:"flex",alignItems:"center",gap:7,padding:"6px 12px",borderRadius:8,background:`${t.color}10`,border:`1px solid ${t.color}20`,cursor:"pointer",flexShrink:0,transition:"background 0.2s"}}
-              onMouseEnter={e=>e.currentTarget.style.background=`${t.color}20`}
-              onMouseLeave={e=>e.currentTarget.style.background=`${t.color}10`}>
-              <EmblemImg team={t} size={14} />
-              <span style={{fontSize:10,fontWeight:700,color:t.color,whiteSpace:"nowrap"}}>{t.name}</span>
-              <span style={{fontSize:9,color:"rgba(255,255,255,0.25)"}}>{t.memberIds.length}/11</span>
+
+      {/* ── How it works ── */}
+      <div style={{borderTop:"1px solid rgba(255,255,255,0.05)",borderBottom:"1px solid rgba(255,255,255,0.05)",background:"rgba(255,255,255,0.012)",position:"relative",zIndex:10}}>
+        <div style={{maxWidth:960,margin:"0 auto",padding:"0 24px",display:"grid",gridTemplateColumns:"repeat(3,1fr)"}}>
+          {[
+            {n:"01",icon:"𝕏", title:"Connect X",       desc:"Sign in with your account. Your public stats — followers, engagement, reach — are scored instantly."},
+            {n:"02",icon:"🛡", title:"Get Your Card",   desc:"Receive an EA-FC style player card based on your real CT influence. One account, one card, forever."},
+            {n:"03",icon:"⚽", title:"Win the Cup",     desc:"Join a team of 11. Compete in the bracket. Live tweets update your stats before every round."},
+          ].map((s,i)=>(
+            <div key={s.n} style={{padding:"24px 28px",borderRight:i<2?"1px solid rgba(255,255,255,0.05)":"none",display:"flex",gap:16,alignItems:"flex-start"}}>
+              <div style={{fontSize:24,flexShrink:0,marginTop:1}}>{s.icon}</div>
+              <div>
+                <div style={{fontSize:9,color:"#FBBF24",fontWeight:700,letterSpacing:2,marginBottom:5}}>{s.n}</div>
+                <div style={{fontSize:13,fontWeight:800,color:"#fff",marginBottom:6}}>{s.title}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.36)",lineHeight:1.65}}>{s.desc}</div>
+              </div>
             </div>
           ))}
         </div>
       </div>
-      <div style={{padding:"12px 28px",borderTop:"1px solid rgba(255,255,255,0.04)",display:"flex",justifyContent:"center",gap:28,position:"relative",zIndex:10}}>
+
+      {/* ── Teams strip ── */}
+      <div style={{padding:"14px 0",borderBottom:"1px solid rgba(255,255,255,0.04)",overflowX:"auto",position:"relative",zIndex:10}}>
+        <div style={{display:"flex",gap:8,paddingLeft:24,paddingRight:24,width:"max-content"}}>
+          {teams.map(t=>(
+            <div key={t.id} onClick={onTournament} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 13px",borderRadius:9,background:`${t.color}0e`,border:`1px solid ${t.color}22`,cursor:"pointer",flexShrink:0,transition:"all 0.18s"}}
+              onMouseEnter={e=>{e.currentTarget.style.background=`${t.color}22`;e.currentTarget.style.borderColor=`${t.color}44`;}}
+              onMouseLeave={e=>{e.currentTarget.style.background=`${t.color}0e`;e.currentTarget.style.borderColor=`${t.color}22`;}}>
+              <EmblemImg team={t} size={14}/>
+              <span style={{fontSize:10,fontWeight:700,color:t.color,whiteSpace:"nowrap"}}>{t.name}</span>
+              <span style={{fontSize:9,color:"rgba(255,255,255,0.2)"}}>{t.memberIds.length}/11</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Tier legend ── */}
+      <div style={{padding:"12px 28px",display:"flex",justifyContent:"center",gap:24,flexWrap:"wrap",position:"relative",zIndex:10}}>
         {Object.values(TIERS).map(t=>(
           <div key={t.name} style={{display:"flex",alignItems:"center",gap:6}}>
-            <div style={{width:8,height:8,borderRadius:"50%",background:t.border,boxShadow:`0 0 5px ${t.glow}`}}/>
-            <span style={{fontSize:9,fontWeight:600,color:"rgba(255,255,255,0.4)",letterSpacing:1.5,textTransform:"uppercase"}}>{t.name}</span>
+            <div style={{width:7,height:7,borderRadius:"50%",background:t.border,boxShadow:`0 0 5px ${t.glow}`}}/>
+            <span style={{fontSize:9,fontWeight:600,color:"rgba(255,255,255,0.32)",letterSpacing:1.5,textTransform:"uppercase"}}>{t.name}</span>
           </div>
         ))}
       </div>
@@ -1454,81 +1535,191 @@ function TeamsListPage({ teams, onBack, onViewTeam, onClaim }) {
 // ─── MATCH DETAIL MODAL ──────────────────────────────────────
 function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
   if (!match) return null;
-  const data    = match.match_data ?? {};
+  const data     = match.match_data ?? {};
   const events: any[] = data.events ?? [];
-  const hs      = data.homeStrength;
-  const as_     = data.awayStrength;
-  const penalty = match.home_pens !== null && match.home_pens !== undefined;
+  const hs       = data.homeStrength;
+  const as_      = data.awayStrength;
+  const penalty  = match.home_pens !== null && match.home_pens !== undefined;
+  const hColor   = homeTeam?.color || "#3B82F6";
+  const aColor   = awayTeam?.color || "#EF4444";
+  const hWin     = match.winner_id === homeTeam?.id;
+  const aWin     = match.winner_id === awayTeam?.id;
+
+  // ── Animated score count-up ───────────────────────────────────
+  const [dispH, setDispH] = useState(0);
+  const [dispA, setDispA] = useState(0);
+  useEffect(() => {
+    const targetH = match.home_score ?? 0;
+    const targetA = match.away_score ?? 0;
+    let h = 0, a = 0;
+    const interval = setInterval(() => {
+      let done = true;
+      if (h < targetH) { h++; setDispH(h); done = false; }
+      if (a < targetA) { a++; setDispA(a); done = false; }
+      if (done) clearInterval(interval);
+    }, 180);
+    return () => clearInterval(interval);
+  }, [match.id]);
+
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(14px)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#0d1117",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,width:"100%",maxWidth:520,maxHeight:"90vh",overflowY:"auto",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-        <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.35)",letterSpacing:2,textTransform:"uppercase"}}>Match Report</div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",backdropFilter:"blur(16px)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#0c1118",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,width:"100%",maxWidth:540,maxHeight:"92vh",overflowY:"auto",fontFamily:"'Segoe UI',system-ui,sans-serif",boxShadow:"0 24px 80px rgba(0,0,0,0.7)"}}>
+
+        {/* ── Header ── */}
+        <div style={{padding:"14px 20px",borderBottom:"1px solid rgba(255,255,255,0.06)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.3)",letterSpacing:2,textTransform:"uppercase"}}>Match Report</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.35)",cursor:"pointer",fontSize:22,lineHeight:1,padding:"0 4px",transition:"color 0.15s"}}
+            onMouseEnter={e=>e.currentTarget.style.color="#fff"}
+            onMouseLeave={e=>e.currentTarget.style.color="rgba(255,255,255,0.35)"}>×</button>
         </div>
-        {/* Scoreboard */}
-        <div style={{padding:"28px 20px 20px",textAlign:"center"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:20}}>
-            <div style={{flex:1,textAlign:"right"}}>
-              {homeTeam&&<div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:10}}>
-                <div><div style={{fontSize:14,fontWeight:800,color:match.winner_id===homeTeam.id?"#22C55E":"#fff"}}>{homeTeam.name}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.3)"}}>{homeTeam.memberIds?.length??0}/11</div></div>
-                <div style={{width:38,height:38,borderRadius:9,background:homeTeam.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}><EmblemImg team={homeTeam} size={22}/></div>
-              </div>}
-            </div>
-            <div style={{textAlign:"center",minWidth:100}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center"}}>
-                <span style={{fontSize:44,fontWeight:900,color:match.winner_id===homeTeam?.id?"#22C55E":"rgba(255,255,255,0.7)"}}>{match.home_score??"?"}</span>
-                <span style={{fontSize:24,color:"rgba(255,255,255,0.25)"}}>–</span>
-                <span style={{fontSize:44,fontWeight:900,color:match.winner_id===awayTeam?.id?"#22C55E":"rgba(255,255,255,0.7)"}}>{match.away_score??"?"}</span>
+
+        {/* ── Scoreboard ── */}
+        <div style={{position:"relative",overflow:"hidden"}}>
+          {/* Team color bleed from sides */}
+          <div style={{position:"absolute",inset:0,background:`linear-gradient(90deg,${hColor}18 0%,transparent 45%,transparent 55%,${aColor}18 100%)`,pointerEvents:"none"}}/>
+          <div style={{padding:"32px 24px 24px",textAlign:"center",position:"relative"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:16}}>
+
+              {/* Home */}
+              <div style={{flex:1,textAlign:"right"}}>
+                {homeTeam && (
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:10}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:800,color:hWin?"#22C55E":"#fff",marginBottom:2}}>{homeTeam.name}</div>
+                      <div style={{fontSize:9,color:"rgba(255,255,255,0.28)"}}>{homeTeam.memberIds?.length??0} players</div>
+                    </div>
+                    <div style={{width:42,height:42,borderRadius:11,background:hColor,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:hWin?`0 0 18px ${hColor}66`:"none"}}>
+                      <EmblemImg team={homeTeam} size={26}/>
+                    </div>
+                  </div>
+                )}
               </div>
-              {penalty&&<div style={{fontSize:11,color:"#FBBF24",fontWeight:700,marginTop:2}}>Pens: {match.home_pens} – {match.away_pens}</div>}
-              {match.status==="complete"&&<div style={{fontSize:9,color:"rgba(255,255,255,0.25)",letterSpacing:1,marginTop:4,textTransform:"uppercase"}}>Full Time</div>}
-            </div>
-            <div style={{flex:1,textAlign:"left"}}>
-              {awayTeam&&<div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{width:38,height:38,borderRadius:9,background:awayTeam.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}><EmblemImg team={awayTeam} size={22}/></div>
-                <div><div style={{fontSize:14,fontWeight:800,color:match.winner_id===awayTeam.id?"#22C55E":"#fff"}}>{awayTeam.name}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.3)"}}>{awayTeam.memberIds?.length??0}/11</div></div>
-              </div>}
+
+              {/* Score */}
+              <div style={{textAlign:"center",minWidth:110}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,justifyContent:"center"}}>
+                  <span style={{fontSize:52,fontWeight:900,lineHeight:1,color:hWin?"#22C55E":"#fff",animation:"scoreCount 0.4s ease both"}}>{dispH}</span>
+                  <span style={{fontSize:28,color:"rgba(255,255,255,0.2)",fontWeight:300,marginBottom:2}}>–</span>
+                  <span style={{fontSize:52,fontWeight:900,lineHeight:1,color:aWin?"#22C55E":"#fff",animation:"scoreCount 0.4s 0.1s ease both"}}>{dispA}</span>
+                </div>
+                {penalty && <div style={{fontSize:11,color:"#FBBF24",fontWeight:700,marginTop:4}}>Pens: {match.home_pens} – {match.away_pens}</div>}
+                <div style={{fontSize:9,color:"rgba(255,255,255,0.22)",letterSpacing:1.5,marginTop:5,textTransform:"uppercase"}}>{match.status==="complete"?"Full Time":"Scheduled"}</div>
+              </div>
+
+              {/* Away */}
+              <div style={{flex:1,textAlign:"left"}}>
+                {awayTeam && (
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:42,height:42,borderRadius:11,background:aColor,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:aWin?`0 0 18px ${aColor}66`:"none"}}>
+                      <EmblemImg team={awayTeam} size={26}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:800,color:aWin?"#22C55E":"#fff",marginBottom:2}}>{awayTeam.name}</div>
+                      <div style={{fontSize:9,color:"rgba(255,255,255,0.28)"}}>{awayTeam.memberIds?.length??0} players</div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          {/* Team strength bars */}
-          {hs&&as_&&(
-            <div style={{marginTop:20,padding:"12px 16px",background:"rgba(255,255,255,0.03)",borderRadius:10,border:"1px solid rgba(255,255,255,0.07)"}}>
-              <div style={{fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Team Strength</div>
-              {(([["Attack",hs.attack,as_.attack],["Defense",hs.defense,as_.defense],["Avg OVR",hs.ovr,as_.ovr]] as [string,number,number][]).map(([label,hv,av])=>{
-                const total=hv+av, hPct=total>0?(hv/total)*100:50;
-                return(<div key={label} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                  <span style={{fontSize:10,color:homeTeam?.color||"#fff",fontWeight:700,width:28,textAlign:"right"}}>{Math.round(hv)}</span>
-                  <div style={{flex:1,height:6,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden",display:"flex"}}>
-                    <div style={{width:`${hPct}%`,background:`${homeTeam?.color||"#3B82F6"}`,borderRadius:"3px 0 0 3px"}}/>
-                    <div style={{flex:1,background:`${awayTeam?.color||"#EF4444"}`,borderRadius:"0 3px 3px 0"}}/>
-                  </div>
-                  <span style={{fontSize:10,color:awayTeam?.color||"#fff",fontWeight:700,width:28}}>{Math.round(av)}</span>
-                  <span style={{fontSize:9,color:"rgba(255,255,255,0.25)",width:52}}>{label}</span>
-                </div>);
-              }))}
-            </div>
-          )}
         </div>
-        {/* Goal events */}
-        {events.length>0&&(
-          <div style={{padding:"0 20px 20px"}}>
-            <div style={{fontSize:9,color:"rgba(255,255,255,0.3)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Match Events</div>
-            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+
+        {/* ── Pitch timeline ── */}
+        {events.length > 0 && (
+          <div style={{padding:"0 24px 20px"}}>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Match Timeline</div>
+            <div style={{position:"relative",height:56,background:"rgba(255,255,255,0.02)",borderRadius:10,border:"1px solid rgba(255,255,255,0.06)",overflow:"hidden"}}>
+              {/* Pitch markings */}
+              <div style={{position:"absolute",left:"50%",top:4,bottom:4,width:1,background:"rgba(255,255,255,0.08)"}}/>
+              <div style={{position:"absolute",left:"25%",top:12,bottom:12,width:1,background:"rgba(255,255,255,0.04)"}}/>
+              <div style={{position:"absolute",left:"75%",top:12,bottom:12,width:1,background:"rgba(255,255,255,0.04)"}}/>
+              {/* Center line label */}
+              <div style={{position:"absolute",left:4,top:"50%",transform:"translateY(-50%)",fontSize:8,color:"rgba(255,255,255,0.18)",fontWeight:700}}>0'</div>
+              <div style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",fontSize:8,color:"rgba(255,255,255,0.18)",fontWeight:700}}>90'</div>
+              {/* Goal dots */}
+              {events.map((e:any, i:number) => {
+                const isHome = e.team === "home";
+                const pct    = Math.min((e.minute / 90) * 100, 98);
+                return (
+                  <div key={i} title={`${e.scorerName} ${e.minute}'`} style={{
+                    position:"absolute",
+                    left:`${pct}%`,
+                    top: isHome ? 4 : undefined,
+                    bottom: isHome ? undefined : 4,
+                    transform:"translateX(-50%)",
+                    width:22,height:22,borderRadius:"50%",
+                    background: isHome ? hColor : aColor,
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:11,
+                    boxShadow:`0 0 10px ${isHome?hColor:aColor}88`,
+                    cursor:"default",
+                    zIndex:2,
+                  }}>⚽</div>
+                );
+              })}
+            </div>
+            {/* Minute labels under goals */}
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
               {events.map((e:any,i:number)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",borderRadius:8,background:"rgba(255,255,255,0.025)",border:`1px solid ${e.team==="home"?(homeTeam?.color||"#3B82F6"):(awayTeam?.color||"#EF4444")}22`}}>
-                  <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.3)",width:26,textAlign:"right"}}>{e.minute}'</span>
-                  <span style={{fontSize:13}}>⚽</span>
-                  <span style={{flex:1,fontSize:12,fontWeight:700,color:"#fff"}}>{e.scorerName}</span>
-                  <span style={{fontSize:10,color:e.team==="home"?(homeTeam?.color||"#3B82F6"):(awayTeam?.color||"#EF4444"),fontWeight:700}}>{e.team==="home"?homeTeam?.name:awayTeam?.name}</span>
-                </div>
+                <div key={i} style={{fontSize:8,color:`${e.team==="home"?hColor:aColor}cc`,fontWeight:700}}>{e.minute}'</div>
               ))}
             </div>
           </div>
         )}
-        {events.length===0&&match.status==="complete"&&(
-          <div style={{padding:"0 20px 24px",textAlign:"center",color:"rgba(255,255,255,0.25)",fontSize:12}}>
-            {data.bye?"Bye — team advances automatically":"0 – 0 (no goals scored)"}
+
+        {/* ── Tug-of-war strength bar ── */}
+        {hs && as_ && (
+          <div style={{padding:"0 24px 20px"}}>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Team Strength</div>
+            {([["⚔️ Attack",hs.attack,as_.attack],["🛡 Defense",hs.defense,as_.defense],["⭐ Avg OVR",hs.ovr,as_.ovr]] as [string,number,number][]).map(([label,hv,av])=>{
+              const total = hv+av;
+              const hPct  = total > 0 ? (hv/total)*100 : 50;
+              return (
+                <div key={label} style={{marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:10,fontWeight:800,color:hColor}}>{Math.round(hv)}</span>
+                    <span style={{fontSize:9,color:"rgba(255,255,255,0.28)"}}>{label}</span>
+                    <span style={{fontSize:10,fontWeight:800,color:aColor}}>{Math.round(av)}</span>
+                  </div>
+                  <div style={{height:7,background:"rgba(255,255,255,0.05)",borderRadius:4,overflow:"hidden",display:"flex"}}>
+                    <div style={{width:`${hPct}%`,background:`linear-gradient(90deg,${hColor}99,${hColor})`,borderRadius:"4px 0 0 4px",transition:"width 0.8s ease"}}/>
+                    <div style={{flex:1,background:`linear-gradient(90deg,${aColor},${aColor}99)`,borderRadius:"0 4px 4px 0"}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Goal events list ── */}
+        {events.length > 0 && (
+          <div style={{padding:"0 24px 24px"}}>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Goals</div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {events.map((e:any,i:number)=>{
+                const isHome = e.team === "home";
+                const col    = isHome ? hColor : aColor;
+                return (
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 13px",borderRadius:9,background:`${col}0a`,border:`1px solid ${col}22`}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0,boxShadow:`0 0 8px ${col}66`}}>⚽</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:800,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.scorerName}</div>
+                      <div style={{fontSize:10,color:col,fontWeight:600}}>{isHome?homeTeam?.name:awayTeam?.name}</div>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:900,color:"rgba(255,255,255,0.45)",flexShrink:0}}>{e.minute}'</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {events.length === 0 && match.status === "complete" && (
+          <div style={{padding:"0 24px 28px",textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:8}}>{data.bye ? "🚀" : "🔒"}</div>
+            <div style={{fontSize:13,color:"rgba(255,255,255,0.3)"}}>
+              {data.bye ? "Bye — team advances automatically" : "0 – 0 · No goals scored"}
+            </div>
           </div>
         )}
       </div>
@@ -1704,41 +1895,66 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, tournament, matche
                 const winHome = done && m.winner_id === m.home_id;
                 const winAway = done && m.winner_id === m.away_id;
                 const penalty = done && m.home_pens !== null;
+                const hc      = home?.color || "#3B82F6";
+                const ac      = away?.color || "#EF4444";
                 return (
-                  <div key={m.id} onClick={()=>done&&setSelectedMatch(m)} style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${done?"rgba(34,197,94,0.2)":"rgba(255,255,255,0.08)"}`,borderRadius:12,overflow:"hidden",cursor:done?"pointer":"default",transition:"all 0.2s"}}
-                    onMouseEnter={e=>{if(done)e.currentTarget.style.background="rgba(255,255,255,0.06)";}}
-                    onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.03)";}}>
-                    <div style={{padding:"6px 12px",background:"rgba(255,255,255,0.025)",borderBottom:"1px solid rgba(255,255,255,0.05)",fontSize:9,color:"rgba(255,255,255,0.25)",fontWeight:700,letterSpacing:1,display:"flex",justifyContent:"space-between"}}>
+                  <div key={m.id} onClick={()=>done&&setSelectedMatch(m)}
+                    style={{position:"relative",borderRadius:14,overflow:"hidden",cursor:done?"pointer":"default",transition:"transform 0.18s,box-shadow 0.18s",
+                      border:`1px solid ${done?(winHome?`${hc}44`:(winAway?`${ac}44`:"rgba(34,197,94,0.15)")):"rgba(255,255,255,0.07)"}`,
+                      background:"#0d1117"}}
+                    onMouseEnter={e=>{if(done){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 8px 32px rgba(0,0,0,0.4)`;} }}
+                    onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
+
+                    {/* Team color bleed background */}
+                    <div style={{position:"absolute",inset:0,background:`linear-gradient(90deg,${hc}12 0%,transparent 42%,transparent 58%,${ac}12 100%)`,pointerEvents:"none"}}/>
+
+                    {/* Match header */}
+                    <div style={{padding:"6px 13px",borderBottom:"1px solid rgba(255,255,255,0.05)",fontSize:9,color:"rgba(255,255,255,0.22)",fontWeight:700,letterSpacing:1,display:"flex",justifyContent:"space-between",position:"relative"}}>
                       <span>MATCH {m.match_num}</span>
-                      {done && <span style={{color:"#22C55E"}}>FT{penalty?" (P)":""}</span>}
+                      {done && <span style={{color:"#22C55E",letterSpacing:0.5}}>FT{penalty?" · PENS":""}</span>}
                     </div>
-                    {/* Home */}
-                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderBottom:"1px solid rgba(255,255,255,0.04)",background:winHome?"rgba(34,197,94,0.06)":"transparent"}}>
+
+                    {/* Home row */}
+                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderBottom:"1px solid rgba(255,255,255,0.04)",position:"relative",
+                      background:winHome?`${hc}12`:"transparent"}}>
                       {home ? (
                         <>
-                          <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${home.color}cc,${home.color}66)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}><EmblemImg team={home} size={18}/></div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:11,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:winHome?"#22C55E":"#fff"}}>{home.name}{winHome?" 🏆":""}</div>
-                            <div style={{fontSize:9,color:"rgba(255,255,255,0.25)"}}>{home.memberIds?.length??0}/11</div>
+                          <div style={{width:30,height:30,borderRadius:8,background:hc,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                            boxShadow:winHome?`0 0 12px ${hc}66`:"none"}}>
+                            <EmblemImg team={home} size={18}/>
                           </div>
-                          {done && <span style={{fontSize:22,fontWeight:900,color:winHome?"#22C55E":"rgba(255,255,255,0.5)",flexShrink:0}}>{m.home_score}</span>}
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
+                              color:winHome?"#22C55E":"#fff"}}>{home.name}</div>
+                            <div style={{fontSize:9,color:"rgba(255,255,255,0.22)"}}>{home.memberIds?.length??0}/11</div>
+                          </div>
+                          {done && <span style={{fontSize:24,fontWeight:900,color:winHome?"#22C55E":"rgba(255,255,255,0.45)",flexShrink:0,letterSpacing:-1}}>{m.home_score}</span>}
+                          {winHome && <span style={{fontSize:12,flexShrink:0}}>🏆</span>}
                         </>
-                      ) : <span style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontStyle:"italic"}}>TBD</span>}
+                      ) : <span style={{fontSize:11,color:"rgba(255,255,255,0.18)",fontStyle:"italic"}}>TBD</span>}
                     </div>
-                    {/* Away */}
-                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:winAway?"rgba(34,197,94,0.06)":"transparent"}}>
+
+                    {/* Away row */}
+                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",position:"relative",
+                      background:winAway?`${ac}12`:"transparent"}}>
                       {away ? (
                         <>
-                          <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${away.color}cc,${away.color}66)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}><EmblemImg team={away} size={18}/></div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:11,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",color:winAway?"#22C55E":"#fff"}}>{away.name}{winAway?" 🏆":""}</div>
-                            <div style={{fontSize:9,color:"rgba(255,255,255,0.25)"}}>{away.memberIds?.length??0}/11</div>
+                          <div style={{width:30,height:30,borderRadius:8,background:ac,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                            boxShadow:winAway?`0 0 12px ${ac}66`:"none"}}>
+                            <EmblemImg team={away} size={18}/>
                           </div>
-                          {done && <span style={{fontSize:22,fontWeight:900,color:winAway?"#22C55E":"rgba(255,255,255,0.5)",flexShrink:0}}>{m.away_score}</span>}
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:11,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
+                              color:winAway?"#22C55E":"#fff"}}>{away.name}</div>
+                            <div style={{fontSize:9,color:"rgba(255,255,255,0.22)"}}>{away.memberIds?.length??0}/11</div>
+                          </div>
+                          {done && <span style={{fontSize:24,fontWeight:900,color:winAway?"#22C55E":"rgba(255,255,255,0.45)",flexShrink:0,letterSpacing:-1}}>{m.away_score}</span>}
+                          {winAway && <span style={{fontSize:12,flexShrink:0}}>🏆</span>}
                         </>
-                      ) : <span style={{fontSize:11,color:"rgba(255,255,255,0.2)",fontStyle:"italic"}}>TBD</span>}
+                      ) : <span style={{fontSize:11,color:"rgba(255,255,255,0.18)",fontStyle:"italic"}}>TBD</span>}
                     </div>
-                    {done && <div style={{fontSize:9,color:"rgba(255,255,255,0.2)",textAlign:"center",padding:"4px 0"}}>Click for match report</div>}
+
+                    {done && <div style={{fontSize:8,color:"rgba(255,255,255,0.18)",textAlign:"center",padding:"5px 0",letterSpacing:1,textTransform:"uppercase",borderTop:"1px solid rgba(255,255,255,0.04)",position:"relative"}}>View match report →</div>}
                   </div>
                 );
               })}
@@ -1789,16 +2005,27 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, tournament, matche
         )}
 
         {/* Champion banner */}
-        {status === "complete" && tournament?.champion_id && teamById[tournament.champion_id] && (
-          <div style={{marginTop:28,padding:"24px",background:"linear-gradient(135deg,rgba(212,165,55,0.2),rgba(212,165,55,0.08))",border:"2px solid rgba(212,165,55,0.5)",borderRadius:16,textAlign:"center"}}>
-            <div style={{fontSize:40,marginBottom:8}}>🏆</div>
-            <div style={{fontSize:11,fontWeight:700,color:"rgba(212,165,55,0.6)",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>CT World Cup 2026 Champion</div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12}}>
-              <div style={{width:48,height:48,borderRadius:12,background:teamById[tournament.champion_id].color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}><EmblemImg team={teamById[tournament.champion_id]} size={30}/></div>
-              <div style={{fontSize:26,fontWeight:900,color:"#FBBF24"}}>{teamById[tournament.champion_id].name}</div>
+        {status === "complete" && tournament?.champion_id && teamById[tournament.champion_id] && (() => {
+          const champ = teamById[tournament.champion_id];
+          return (
+            <div style={{marginTop:32,position:"relative",overflow:"hidden",borderRadius:20,padding:"36px 24px",textAlign:"center",
+              background:`linear-gradient(135deg,rgba(212,165,55,0.18) 0%,rgba(212,165,55,0.06) 100%)`,
+              border:"2px solid rgba(212,165,55,0.45)",boxShadow:"0 0 60px rgba(212,165,55,0.12)"}}>
+              {/* Background shimmer */}
+              <div style={{position:"absolute",inset:0,background:"linear-gradient(105deg,transparent 40%,rgba(212,165,55,0.06) 50%,transparent 60%)",animation:"shimmer 3s ease-in-out infinite",pointerEvents:"none"}}/>
+              <div style={{fontSize:52,marginBottom:10,animation:"packFloat 4s ease-in-out infinite"}}>🏆</div>
+              <div style={{fontSize:10,fontWeight:700,color:"rgba(212,165,55,0.6)",letterSpacing:3,textTransform:"uppercase",marginBottom:14}}>CT World Cup 2026 Champion</div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:16,marginBottom:12}}>
+                <div style={{width:56,height:56,borderRadius:14,background:champ.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,
+                  boxShadow:`0 0 28px ${champ.color}88`}}>
+                  <EmblemImg team={champ} size={34}/>
+                </div>
+                <div style={{fontSize:32,fontWeight:900,color:"#FBBF24",letterSpacing:-1}}>{champ.name}</div>
+              </div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.35)"}}>{champ.memberIds?.length ?? 0} players · CT World Cup 2026</div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
@@ -2394,6 +2621,10 @@ export default function CTWCApp() {
         @keyframes confettiBurst { 0%{transform:translate(-50%,-50%) rotate(0deg);opacity:1} 100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) rotate(var(--rot));opacity:0} }
         @keyframes shimmerSweep { 0%{left:-60px} 100%{left:260px} }
         @keyframes shimmer { 0%{left:-100%} 100%{left:200%} }
+        @keyframes orbFloat { 0%,100%{transform:translateY(0px) scale(1)} 50%{transform:translateY(-30px) scale(1.04)} }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes scoreCount { 0%{transform:scale(1.4);opacity:0} 60%{transform:scale(0.95);opacity:1} 100%{transform:scale(1);opacity:1} }
+        @keyframes pitchPulse { 0%,100%{transform:scaleX(1)} 50%{transform:scaleX(1.03)} }
         *{box-sizing:border-box;margin:0;padding:0}
         body{background:#070B14;overflow-x:hidden}
         input::placeholder{color:rgba(255,255,255,0.22)}
