@@ -1535,10 +1535,17 @@ function PlayerPool({ pool, myCard, onBack, onClaim }) {
 }
 
 // ─── TEAMS LIST ───────────────────────────────────────────────
-function TeamsListPage({ teams, onBack, onViewTeam, onClaim }) {
+function TeamsListPage({ teams, myCard, onBack, onViewTeam, onClaim }) {
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-      <Nav onHome={onBack} right={<button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>}/>
+      <Nav onHome={onBack} right={
+        myCard
+          ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",borderRadius:8,background:"rgba(34,197,94,0.08)",border:"1px solid rgba(34,197,94,0.2)"}}>
+              <div style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",boxShadow:"0 0 6px #22C55E"}}/>
+              <span style={{fontSize:11,fontWeight:700,color:"#22C55E"}}>OVR {myCard.ovr} · {myCard.position?.code ?? "—"}</span>
+            </div>
+          : <button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>
+      }/>
       <div style={{maxWidth:800,margin:"0 auto",padding:"28px 20px"}}>
         <h2 style={{fontSize:22,fontWeight:800,margin:"0 0 20px"}}>All Teams ({teams.length})</h2>
         {teams.length===0?(<div style={{textAlign:"center",padding:"60px 0",color:"rgba(255,255,255,0.3)"}}>No teams yet — claim a card to get started.</div>):(
@@ -2451,7 +2458,7 @@ export default function CTWCApp() {
     ]);
     if (teamsData && cardsData) {
       setTeams(teamsData.map((t: any) => transformTeam(t, cardsData)));
-      setPool(cardsData.filter((c: any) => !c.team_id).map(transformCard));
+      setPool(cardsData.map(transformCard)); // pool shows ALL claimed cards
       setClaimed(new Set(cardsData.map((c: any) => c.x_handle)));
     }
     setLoading(false);
@@ -2693,7 +2700,7 @@ export default function CTWCApp() {
       {page==="browseTeams" && <BrowseTeamsPage card={pending} teams={teams} onJoined={handleJoinedTeam} onBack={()=>pending?setPage("teamSetup"):setPage("landing")}/>}
       {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
       {page==="pool"        && <PlayerPool pool={pool} myCard={pending} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
-      {page==="teamsList"   && <TeamsListPage teams={teams} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
+      {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
       {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} adminLoading={adminLoading}/>}
       {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
     </div>
