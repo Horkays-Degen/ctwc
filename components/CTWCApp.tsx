@@ -1471,25 +1471,64 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
 }
 
 // ─── PLAYER POOL ─────────────────────────────────────────────
-function PlayerPool({ pool, onBack, onClaim }) {
+function PlayerPool({ pool, myCard, onBack, onClaim }) {
   const [filter,setFilter]=useState("All"), [selected,setSelected]=useState(null);
   const tierNames=["All","Mythic","CT Legend","CT Elite","CT Star","CT Player"];
   const visible=filter==="All"?pool:pool.filter(c=>c.tier.name===filter);
   const counts={};Object.values(TIERS).forEach(t=>{counts[t.name]=pool.filter(c=>c.tier.name===t.name).length;});
+  const hasClaimed = !!myCard;
+
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       {selected&&<div onClick={()=>setSelected(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(14px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><ShieldCard card={selected} size="large"/></div>}
-      <Nav onHome={onBack} right={<button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>}/>
+
+      <Nav onHome={onBack} right={
+        hasClaimed
+          ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",borderRadius:8,background:"rgba(34,197,94,0.08)",border:"1px solid rgba(34,197,94,0.2)"}}>
+              <div style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",boxShadow:"0 0 6px #22C55E"}}/>
+              <span style={{fontSize:11,fontWeight:700,color:"#22C55E"}}>Card Claimed · OVR {myCard.ovr}</span>
+            </div>
+          : <button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>
+      }/>
+
       <div style={{padding:"8px 24px",borderBottom:"1px solid rgba(255,255,255,0.04)",display:"flex",gap:20,overflowX:"auto"}}>
         {Object.values(TIERS).map(t=><div key={t.name} style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}><div style={{width:7,height:7,borderRadius:"50%",background:t.border}}/><span style={{fontSize:10,color:t.accent,fontWeight:700}}>{t.name}</span><span style={{fontSize:10,color:"rgba(255,255,255,0.25)"}}>{counts[t.name]||0}</span></div>)}
       </div>
+
       <div style={{maxWidth:1100,margin:"0 auto",padding:"22px 20px"}}>
         <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
           {tierNames.map(name=>{const t=Object.values(TIERS).find(x=>x.name===name);return(<button key={name} onClick={()=>setFilter(name)} style={{padding:"6px 14px",fontSize:11,fontWeight:700,borderRadius:16,cursor:"pointer",background:filter===name?(t?`${t.border}30`:"rgba(255,255,255,0.1)"):"transparent",border:`1px solid ${filter===name?(t?t.border:"rgba(255,255,255,0.2)"):"rgba(255,255,255,0.07)"}`,color:filter===name?(t?t.accent:"#fff"):"rgba(255,255,255,0.4)"}}>
             {name}{name!=="All"&&` (${counts[name]||0})`}</button>);})}
         </div>
-        {visible.length===0?(<div style={{textAlign:"center",padding:"70px 0"}}><p style={{fontSize:14,color:"rgba(255,255,255,0.3)"}}>No cards yet</p><button onClick={onClaim} style={{marginTop:12,padding:"11px 24px",fontSize:13,fontWeight:700,borderRadius:9,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>Be the First</button></div>)
-        :(<div style={{display:"flex",flexWrap:"wrap",gap:18}}>{visible.map(card=><ShieldCard key={card.id} card={card} size="small" onClick={()=>setSelected(card)}/>)}</div>)}
+
+        {visible.length===0 ? (
+          <div style={{textAlign:"center",padding:"70px 0"}}>
+            <p style={{fontSize:14,color:"rgba(255,255,255,0.3)"}}>No cards yet</p>
+            {!hasClaimed && <button onClick={onClaim} style={{marginTop:12,padding:"11px 24px",fontSize:13,fontWeight:700,borderRadius:9,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>Be the First</button>}
+          </div>
+        ) : (
+          <div style={{display:"flex",flexWrap:"wrap",gap:18}}>
+            {visible.map(card => {
+              const isMe = myCard && card.id === myCard.id;
+              return (
+                <div key={card.id} style={{position:"relative"}}>
+                  {isMe && (
+                    <div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",zIndex:10,
+                      padding:"3px 10px",borderRadius:20,background:"linear-gradient(135deg,#FBBF24,#D4A537)",
+                      fontSize:9,fontWeight:900,color:"#1a1a1a",letterSpacing:1.5,whiteSpace:"nowrap",
+                      boxShadow:"0 0 12px rgba(212,165,55,0.5)"}}>
+                      ⭐ YOU
+                    </div>
+                  )}
+                  <div style={{outline:isMe?"2px solid #FBBF24":"none",outlineOffset:isMe?4:0,borderRadius:12,
+                    boxShadow:isMe?"0 0 24px rgba(212,165,55,0.35)":"none",transition:"all 0.2s"}}>
+                    <ShieldCard card={card} size="small" onClick={()=>setSelected(card)}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2653,7 +2692,7 @@ export default function CTWCApp() {
       {page==="createTeam"  && pending && <CreateTeamPage card={pending} onCreated={handleCreatedTeam} onBack={()=>setPage("browseTeams")}/>}
       {page==="browseTeams" && <BrowseTeamsPage card={pending} teams={teams} onJoined={handleJoinedTeam} onBack={()=>pending?setPage("teamSetup"):setPage("landing")}/>}
       {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
-      {page==="pool"        && <PlayerPool pool={pool} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
+      {page==="pool"        && <PlayerPool pool={pool} myCard={pending} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="teamsList"   && <TeamsListPage teams={teams} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
       {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} adminLoading={adminLoading}/>}
       {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
