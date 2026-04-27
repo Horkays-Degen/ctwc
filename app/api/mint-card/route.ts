@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-server";
 import { buildCard, XProfile } from "@/lib/card-engine";
+import { removeBackground } from "@/lib/remove-bg";
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,6 +57,11 @@ export async function POST(req: NextRequest) {
         verified: u.verified ?? (u.verified_type === "blue"),
       };
     }
+
+    // ── Remove background from avatar (transparent PNG for EA FC card look) ──
+    // Fire-and-forget is NOT used here — we need the final URL before saving to DB.
+    // Falls back to original URL if REMOVE_BG_API_KEY is absent or API fails.
+    profile.avatar_url = await removeBackground(profile.avatar_url, handle);
 
     const built = buildCard(profile);
     let { stats, ovr, tier, badges } = built;
