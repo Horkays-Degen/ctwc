@@ -500,142 +500,203 @@ function getStatDefs(posCode: string) {
   return POS_STATS.FWD;
 }
 
+// Constellation geometry — shared across all card sizes, scaled via s
+const CONST_LINES = [
+  [[0.08,0.04],[0.32,0.13],[0.58,0.06],[0.82,0.11]],
+  [[0.32,0.13],[0.50,0.24],[0.68,0.18]],
+  [[0.58,0.06],[0.68,0.18],[0.92,0.14]],
+  [[0.04,0.22],[0.18,0.32],[0.32,0.13]],
+  [[0.82,0.11],[0.96,0.20],[0.88,0.36]],
+  [[0.04,0.50],[0.14,0.40],[0.28,0.46]],
+  [[0.92,0.42],[0.76,0.50],[0.94,0.60]],
+  [[0.08,0.04],[0.04,0.22],[0.10,0.38]],
+  [[0.92,0.14],[0.96,0.20]],
+  [[0.18,0.32],[0.10,0.38],[0.14,0.40]],
+];
+const CONST_DOTS = [
+  [0.08,0.04],[0.32,0.13],[0.58,0.06],[0.82,0.11],
+  [0.50,0.24],[0.68,0.18],[0.92,0.14],[0.18,0.32],
+  [0.04,0.22],[0.96,0.20],[0.88,0.36],[0.14,0.40],
+  [0.04,0.50],[0.28,0.46],[0.92,0.42],[0.76,0.50],[0.94,0.60],[0.10,0.38],
+];
+const BRIGHT_STARS = [[0.58,0.06],[0.32,0.13],[0.82,0.11],[0.50,0.24]];
+
+// Tier icon for left-edge badge
+const TIER_ICON: Record<string,string> = {
+  "Mythic":"🔥","CT Legend":"👑","CT Elite":"⚡","CT Star":"🌊","CT Player":"⚽",
+};
+
 function ShieldCard({ card, size="large", onClick = undefined }: { card: any; size?: string; onClick?: any }) {
   const [hovStat, setHovStat] = useState<string|null>(null);
-  const t = card.tier;
-  const isLg = size === "large";
+  const t        = card.tier;
+  const isLg     = size === "large";
+  const W        = isLg ? 280 : 175;
+  const H        = isLg ? 400 : 250;
+  const s        = isLg ? 1 : 0.625;
+  const r        = Math.round(16*s);
   const statDefs = getStatDefs(card.position?.code ?? "CM");
-  const W = isLg ? 280 : 175;
-  const H = isLg ? 400 : 250;
-  const s = isLg ? 1 : 0.625; // scale factor
+  const VW = 280, VH = 180; // SVG viewbox for constellation
 
   return (
-    <div
-      onClick={onClick}
-      onMouseEnter={e => { if (onClick) (e.currentTarget as HTMLDivElement).style.transform = "scale(1.04)"; }}
-      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = "scale(1)"; }}
-      style={{
-        width: W, height: H, flexShrink: 0, position: "relative", overflow: "hidden",
-        borderRadius: Math.round(14*s), cursor: onClick ? "pointer" : "default",
-        background: `linear-gradient(160deg, ${t.bg} 0%, ${t.bgDark} 100%)`,
-        border: `${Math.max(1, Math.round(2*s))}px solid ${t.border}`,
-        boxShadow: `0 0 ${Math.round(28*s)}px ${t.glow}, 0 8px 28px rgba(0,0,0,0.7)`,
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
-        transition: "transform 0.2s",
-        userSelect: "none",
-        display: "flex", flexDirection: "column",
+    <div onClick={onClick}
+      onMouseEnter={e=>{ if(onClick)(e.currentTarget as HTMLElement).style.transform="scale(1.04)"; }}
+      onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.transform="scale(1)"; }}
+      style={{width:W,height:H,flexShrink:0,position:"relative",overflow:"hidden",
+        borderRadius:r,cursor:onClick?"pointer":"default",userSelect:"none",
+        fontFamily:"'Segoe UI',system-ui,sans-serif",transition:"transform 0.2s",
+        boxShadow:`0 0 ${Math.round(32*s)}px ${t.glow}55, 0 12px 40px rgba(0,0,0,0.85)`,
       }}>
-      {/* Ambient glow overlay */}
-      <div style={{position:"absolute",inset:0,background:`radial-gradient(ellipse at 65% 18%, ${t.accent}20, transparent 58%)`,pointerEvents:"none",zIndex:0}}/>
 
-      {/* Tier header strip */}
-      <div style={{
-        background:`linear-gradient(90deg, ${t.border}, ${t.accent}cc)`,
-        padding:`${Math.round(4*s)}px ${Math.round(10*s)}px`,
-        display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0, zIndex:1,
-      }}>
-        <span style={{fontSize:Math.round(8*s),fontWeight:800,letterSpacing:Math.round(2*s),color:t.bgDark,textTransform:"uppercase"}}>{t.name}</span>
-        <span style={{fontSize:Math.round(7*s),color:t.bgDark,opacity:0.65,fontFamily:"monospace"}}>CTWC 2026</span>
+      {/* ── 1. Background gradient ── */}
+      <div style={{position:"absolute",inset:0,
+        background:`linear-gradient(175deg,${t.bg} 0%,${t.bgDark} 55%,#000 100%)`,
+        zIndex:0}}/>
+
+      {/* ── 2. Top radial glow ── */}
+      <div style={{position:"absolute",top:"-15%",left:"50%",transform:"translateX(-50%)",
+        width:"90%",height:"55%",
+        background:`radial-gradient(ellipse at 50% 0%,${t.accent}28 0%,transparent 70%)`,
+        zIndex:1,pointerEvents:"none"}}/>
+
+      {/* ── 3. Constellation SVG ── */}
+      <svg style={{position:"absolute",top:0,left:0,width:"100%",height:`${Math.round(H*0.62)}px`,
+        zIndex:2,opacity:0.45}} viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice">
+        {CONST_LINES.map((seg,i)=>(
+          <polyline key={i}
+            points={seg.map(([x,y])=>`${x*VW},${y*VH}`).join(" ")}
+            fill="none" stroke={t.border} strokeWidth="0.7" opacity="0.7"/>
+        ))}
+        {CONST_DOTS.map(([x,y],i)=>(
+          <circle key={i} cx={x*VW} cy={y*VH} r="1.4" fill={t.accent} opacity="0.75"/>
+        ))}
+        {BRIGHT_STARS.map(([x,y],i)=>(
+          <circle key={`s${i}`} cx={x*VW} cy={y*VH} r="2.8" fill={t.accent} opacity="0.55"/>
+        ))}
+      </svg>
+
+      {/* ── 4. Metallic card border overlay ── */}
+      <div style={{position:"absolute",inset:0,borderRadius:r,zIndex:20,pointerEvents:"none",
+        boxShadow:`inset 0 0 0 ${Math.max(1,Math.round(2*s))}px ${t.border}`,
+      }}/>
+
+      {/* ── 5. OVR + Position (top-left) ── */}
+      <div style={{position:"absolute",top:Math.round(11*s),left:Math.round(11*s),zIndex:15,lineHeight:1}}>
+        <div style={{fontSize:Math.round(48*s),fontWeight:900,color:"#fff",lineHeight:0.88,letterSpacing:-1,
+          textShadow:`0 2px ${Math.round(12*s)}px rgba(0,0,0,0.8), 0 0 ${Math.round(20*s)}px ${t.glow}66`}}>
+          {card.ovr}
+        </div>
+        <div style={{fontSize:Math.round(13*s),fontWeight:800,color:t.accent,letterSpacing:1,
+          marginTop:Math.round(4*s),textShadow:`0 0 ${Math.round(8*s)}px ${t.glow}`}}>
+          {card.position?.code ?? "MID"}
+        </div>
       </div>
 
-      {/* Body */}
-      <div style={{padding:`${Math.round(8*s)}px ${Math.round(12*s)}px`,flex:1,display:"flex",flexDirection:"column",zIndex:1}}>
+      {/* ── 6. Left-edge badges ── */}
+      <div style={{position:"absolute",left:Math.round(11*s),top:Math.round(82*s),zIndex:15,
+        display:"flex",flexDirection:"column",gap:Math.round(5*s)}}>
+        {/* Tier badge */}
+        <div style={{width:Math.round(22*s),height:Math.round(22*s),borderRadius:Math.round(5*s),
+          background:`linear-gradient(135deg,${t.border}55,${t.bg})`,
+          border:`1px solid ${t.border}80`,
+          display:"flex",alignItems:"center",justifyContent:"center",
+          fontSize:Math.round(12*s),boxShadow:`0 0 ${Math.round(8*s)}px ${t.glow}44`}}>
+          {TIER_ICON[t.name] ?? "⚽"}
+        </div>
+        {/* Verified badge */}
+        {card.rawProfile?.verified && (
+          <div style={{width:Math.round(22*s),height:Math.round(22*s),borderRadius:Math.round(5*s),
+            background:"#1D9BF0",display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:Math.round(11*s),fontWeight:900,color:"#fff",
+            boxShadow:`0 0 ${Math.round(8*s)}px #1D9BF066`}}>✓</div>
+        )}
+      </div>
 
-        {/* OVR + avatar row */}
-        <div style={{display:"flex",alignItems:"flex-start",gap:Math.round(8*s)}}>
-          {/* OVR + position */}
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",minWidth:Math.round(52*s)}}>
-            <span style={{fontSize:Math.round(50*s),fontWeight:900,color:t.textColor,lineHeight:0.88,letterSpacing:-1}}>{card.ovr}</span>
-            <span style={{fontSize:Math.round(13*s),fontWeight:700,color:t.textColor,opacity:0.8,marginTop:Math.round(3*s)}}>{card.position?.code ?? "MID"}</span>
-            {card.rawProfile?.verified && (
-              <div style={{marginTop:Math.round(5*s),background:"#1D9BF0",borderRadius:Math.round(3*s),padding:`${Math.round(1*s)}px ${Math.round(5*s)}px`,fontSize:Math.round(7*s),fontWeight:800,color:"#fff"}}>✓</div>
-            )}
+      {/* ── 7. Avatar — large portrait-style, fades into bottom panel ── */}
+      <div style={{position:"absolute",top:Math.round(8*s),left:"50%",transform:"translateX(-28%)",
+        width:Math.round(165*s),height:Math.round(205*s),
+        zIndex:10,overflow:"hidden",borderRadius:Math.round(4*s)}}>
+        {card.avatarUrl ? (
+          <img src={card.avatarUrl} alt={card.displayName}
+            style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"top center",
+              WebkitMaskImage:`linear-gradient(180deg,#000 50%,transparent 95%)`,
+              maskImage:`linear-gradient(180deg,#000 50%,transparent 95%)`,
+              display:"block"}}/>
+        ) : (
+          <div style={{width:"100%",height:"100%",
+            background:`linear-gradient(160deg,${aColor(card.displayName)},${t.bgDark})`,
+            display:"flex",alignItems:"center",justifyContent:"center",
+            fontSize:Math.round(48*s),fontWeight:900,color:"rgba(255,255,255,0.85)",
+            WebkitMaskImage:`linear-gradient(180deg,#000 50%,transparent 95%)`,
+            maskImage:`linear-gradient(180deg,#000 50%,transparent 95%)`}}>
+            {inits(card.displayName)}
           </div>
-          {/* Avatar */}
-          <div style={{flex:1,display:"flex",justifyContent:"center",alignItems:"center",paddingTop:Math.round(4*s)}}>
-            {card.avatarUrl ? (
-              <img src={card.avatarUrl} alt={card.displayName} style={{
-                width:Math.round(98*s),height:Math.round(98*s),borderRadius:"50%",objectFit:"cover",
-                border:`${Math.round(3*s)}px solid ${t.border}`,
-                boxShadow:`0 0 ${Math.round(20*s)}px ${t.glow}`,
-              }}/>
-            ) : (
-              <div style={{
-                width:Math.round(98*s),height:Math.round(98*s),borderRadius:"50%",
-                background:aColor(card.displayName),
-                border:`${Math.round(3*s)}px solid ${t.border}`,
-                boxShadow:`0 0 ${Math.round(20*s)}px ${t.glow}`,
-                display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:Math.round(30*s),fontWeight:800,color:"#fff",
-              }}>{inits(card.displayName)}</div>
-            )}
+        )}
+      </div>
+
+      {/* ── 8. Bottom panel — dark overlay with name + stats ── */}
+      <div style={{position:"absolute",bottom:0,left:0,right:0,zIndex:12,
+        background:`linear-gradient(180deg,transparent 0%,${t.bgDark}dd 22%,${t.bgDark}f8 50%,#000e 100%)`,
+        padding:`${Math.round(22*s)}px ${Math.round(10*s)}px ${Math.round(9*s)}px`,
+        borderTop:`1px solid ${t.border}25`}}>
+
+        {/* Player name */}
+        <div style={{textAlign:"center",marginBottom:Math.round(6*s)}}>
+          <div style={{fontSize:Math.round(15*s),fontWeight:900,color:"#fff",letterSpacing:0.5,
+            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
+            textShadow:`0 0 ${Math.round(14*s)}px ${t.glow}88`}}>
+            {card.displayName}
           </div>
         </div>
 
         {/* Divider */}
-        <div style={{height:1,background:`${t.border}50`,margin:`${Math.round(8*s)}px 0 ${Math.round(5*s)}px`}}/>
+        <div style={{height:1,background:`linear-gradient(90deg,transparent,${t.border}60,transparent)`,
+          marginBottom:Math.round(6*s)}}/>
 
-        {/* Name */}
-        <div style={{textAlign:"center"}}>
-          <div style={{fontSize:Math.round(15*s),fontWeight:800,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{card.displayName}</div>
-          <div style={{fontSize:Math.round(10*s),color:t.textColor,opacity:0.4,fontFamily:"monospace",marginTop:1}}>@{card.handle}</div>
-        </div>
-
-        {/* Badges */}
-        {isLg && card.badges?.length > 0 && (
-          <div style={{display:"flex",justifyContent:"center",gap:5,marginTop:5,flexWrap:"wrap"}}>
-            {card.badges.slice(0,2).map((b,i)=>(
-              <span key={i} style={{fontSize:8,fontWeight:700,color:b.color,padding:"2px 7px",borderRadius:4,background:`${b.color}18`,border:`1px solid ${b.color}40`}}>{b.label}</span>
-            ))}
-          </div>
-        )}
-
-        {/* Spacer */}
-        <div style={{flex:1}}/>
-
-        {/* Stats — FIFA FC style */}
-        <div style={{borderTop:`1px solid ${t.border}40`,paddingTop:Math.round(8*s),display:"flex",justifyContent:"space-around"}}>
+        {/* Stats row */}
+        <div style={{display:"flex",justifyContent:"space-around",position:"relative"}}>
           {statDefs.map(sd => {
             const val = card.stats?.[sd.stat] ?? 60;
             return (
               <div key={sd.k} style={{textAlign:"center",position:"relative"}}
                 onMouseEnter={()=>isLg&&setHovStat(sd.k)}
                 onMouseLeave={()=>setHovStat(null)}>
-                {/* Tooltip */}
                 {hovStat===sd.k && (
-                  <div style={{
-                    position:"absolute",bottom:"calc(100% + 6px)",left:"50%",transform:"translateX(-50%)",
-                    background:"rgba(0,0,0,0.94)",border:`1px solid ${t.border}70`,
-                    color:"#fff",fontSize:9,padding:"5px 9px",borderRadius:5,
-                    whiteSpace:"nowrap",zIndex:200,boxShadow:"0 4px 16px rgba(0,0,0,0.7)",
-                    pointerEvents:"none",
-                  }}>
-                    <span style={{color:t.accent,fontWeight:700}}>{sd.k}</span>{" — "}{sd.tip}
+                  <div style={{position:"absolute",bottom:"calc(100% + 8px)",left:"50%",transform:"translateX(-50%)",
+                    background:"rgba(0,0,0,0.95)",border:`1px solid ${t.border}80`,color:"#fff",
+                    fontSize:9,padding:"5px 9px",borderRadius:6,whiteSpace:"nowrap",zIndex:200,
+                    boxShadow:`0 4px 20px rgba(0,0,0,0.8),0 0 12px ${t.glow}33`,pointerEvents:"none"}}>
+                    <span style={{color:t.accent,fontWeight:800}}>{sd.k}</span>{" · "}{sd.tip}
                   </div>
                 )}
-                <div style={{fontSize:Math.round(9*s),color:t.textColor,opacity:0.55,fontWeight:700,letterSpacing:0.8}}>{sd.k}</div>
-                <div style={{fontSize:Math.round(20*s),fontWeight:800,color:"#fff",lineHeight:1.1}}>{val}</div>
+                <div style={{fontSize:Math.round(8*s),color:t.accent,fontWeight:700,
+                  letterSpacing:0.5,opacity:0.85,marginBottom:Math.round(1*s)}}>{sd.k}</div>
+                <div style={{fontSize:Math.round(20*s),fontWeight:900,color:"#fff",lineHeight:1,
+                  textShadow:`0 0 ${Math.round(8*s)}px ${t.glow}66`}}>{val}</div>
               </div>
             );
           })}
         </div>
 
-        {/* Footer */}
-        <div style={{textAlign:"center",marginTop:Math.round(4*s)}}>
-          <span style={{fontSize:Math.round(7*s),color:t.textColor,opacity:0.18,letterSpacing:3,fontWeight:700,textTransform:"uppercase"}}>Crypto Twitter World Cup</span>
+        {/* Footer branding */}
+        <div style={{display:"flex",justifyContent:"center",alignItems:"center",
+          gap:Math.round(6*s),marginTop:Math.round(6*s)}}>
+          <span style={{fontSize:Math.round(9*s),color:t.border,opacity:0.55,fontWeight:700}}>𝕏</span>
+          <div style={{height:Math.round(8*s),width:1,background:`${t.border}30`}}/>
+          <span style={{fontSize:Math.round(7*s),color:t.accent,opacity:0.4,letterSpacing:2,
+            fontWeight:700,textTransform:"uppercase"}}>CTWC 2026</span>
+          <div style={{height:Math.round(8*s),width:1,background:`${t.border}30`}}/>
+          <span style={{fontSize:Math.round(8*s),color:t.border,opacity:0.45}}>
+            {t.name==="Mythic"?"✦":t.name==="CT Legend"?"✦✦":t.name==="CT Elite"?"✦✦✦":"✦"}
+          </span>
         </div>
       </div>
 
-      {/* CT Legend shimmer sweep */}
+      {/* ── 9. Shimmer sweep for CT Legend + Mythic ── */}
       {(t.name==="CT Legend"||t.name==="Mythic") && (
-        <div style={{
-          position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden",borderRadius:Math.round(14*s),
-        }}>
-          <div style={{
-            position:"absolute",top:0,left:"-100%",width:"60%",height:"100%",
-            background:"linear-gradient(105deg,transparent 20%,rgba(255,255,255,0.07) 50%,transparent 80%)",
-            animation:"shimmer 3s infinite linear",
-          }}/>
+        <div style={{position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden",borderRadius:r,zIndex:19}}>
+          <div style={{position:"absolute",top:0,left:"-100%",width:"55%",height:"100%",
+            background:"linear-gradient(105deg,transparent 20%,rgba(255,255,255,0.06) 50%,transparent 80%)",
+            animation:"shimmer 3.5s infinite linear"}}/>
         </div>
       )}
     </div>
