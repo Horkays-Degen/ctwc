@@ -459,48 +459,47 @@ const aColor= n => ACOLORS[n.charCodeAt(0)%ACOLORS.length];
 const inits = n => n.split(" ").map(w=>w[0]).join("").substring(0,2).toUpperCase();
 
 // ─── SHIELD CARD ─────────────────────────────────────────────
-// FIFA-style stat definitions — map CT stats to FC labels with tooltips
-// Position-aware stat labels — each position maps CT metrics to
-// the football attributes that make sense for that role
-const POS_STATS: Record<string, { k:string; stat:string; tip:string }[]> = {
-  GK: [
-    { k:"DIV", stat:"ENG", tip:"Diving — engagement & reactivity to content" },
-    { k:"HAN", stat:"CLT", tip:"Handling — clout & listed count (how trusted you are)" },
-    { k:"KIC", stat:"VRL", tip:"Kicking — viral reach & content distribution" },
-    { k:"REF", stat:"VOL", tip:"Reflexes — posting volume & response speed" },
-    { k:"SPD", stat:"INF", tip:"Speed — follower influence & overall reach" },
-  ],
-  DEF: [
-    { k:"PAC", stat:"VOL", tip:"Pace — tweet frequency & posting activity" },
-    { k:"DEF", stat:"ENG", tip:"Defending — engagement & holding attention" },
-    { k:"PHY", stat:"INF", tip:"Physical — follower count & raw presence" },
-    { k:"TAC", stat:"CLT", tip:"Tackling — clout & listed count authority" },
-    { k:"PAS", stat:"VRL", tip:"Passing — viral reach & content spread" },
-  ],
-  MID: [
-    { k:"PAC", stat:"VOL", tip:"Pace — tweet pace & activity" },
-    { k:"SHO", stat:"ENG", tip:"Shooting — engagement & impact rate" },
-    { k:"PAS", stat:"VRL", tip:"Passing — viral reach & content spread" },
-    { k:"DRI", stat:"INF", tip:"Dribbling — follower influence & skill" },
-    { k:"DEF", stat:"CLT", tip:"Defending — clout & listed authority" },
-  ],
-  FWD: [
-    { k:"PAC", stat:"VOL", tip:"Pace — tweet speed & posting frequency" },
-    { k:"SHO", stat:"ENG", tip:"Shooting — engagement & finishing ability" },
-    { k:"DRI", stat:"INF", tip:"Dribbling — follower influence" },
-    { k:"PAS", stat:"VRL", tip:"Passing — viral content spread" },
-    { k:"PHY", stat:"CLT", tip:"Physical — clout & listed count strength" },
-  ],
+// Universal CT stat labels — same for every position.
+// These feel like CT personality traits, not generic football stats.
+const CT_STATS = [
+  { k:"ALPHA",  stat:"ENG", tip:"Early alpha calls · engagement rate · first-mover energy" },
+  { k:"CLUTCH", stat:"CLT", tip:"Listed authority · trusted voice · clutch reputation" },
+  { k:"GRIND",  stat:"VOL", tip:"Tweet volume · consistency · non-stop output" },
+  { k:"REACH",  stat:"INF", tip:"Follower count · total influence · network size" },
+  { k:"VIRAL",  stat:"VRL", tip:"Retweet power · content spread · viral coefficient" },
+];
+
+// Per-tier FX config — defines what visual layer each tier gets
+const TIER_FX: Record<string,{particles:number;streaks:boolean;grain:boolean}> = {
+  "CT Player": { particles:0,  streaks:false, grain:false },
+  "CT Star":   { particles:5,  streaks:true,  grain:false },
+  "CT Elite":  { particles:14, streaks:false, grain:false },
+  "CT Legend": { particles:9,  streaks:false, grain:true  },
+  "Mythic":    { particles:20, streaks:true,  grain:false },
 };
 
-function getStatDefs(posCode: string) {
-  if (posCode === "GK")                              return POS_STATS.GK;
-  if (["CB","LB","RB"].includes(posCode))            return POS_STATS.DEF;
-  if (["CDM","CM","CAM"].includes(posCode))          return POS_STATS.MID;
-  return POS_STATS.FWD;
+// Seeded particle positions — deterministic per handle
+function seedParticles(handle: string, count: number) {
+  let h = 0;
+  for (let i = 0; i < handle.length; i++) h = (Math.imul(h ^ handle.charCodeAt(i), 0x9e3779b9)) >>> 0;
+  return Array.from({length: count}, (_, i) => {
+    const r  = (Math.imul(h ^ (i * 2654435761), 0x9e3779b9)) >>> 0;
+    const r2 = (Math.imul(r ^ (i * 1234567891), 0x9e3779b9)) >>> 0;
+    return {
+      x:    (r  >>> 0) % 96,
+      y:    (r2 >>> 0) % 72,
+      size: 1.5 + ((r >>> 16) % 3),
+      op:   0.2 + ((r >>> 8)  % 5) * 0.1,
+      dur:  2   + ((r >>> 4)  % 30) * 0.1,
+      del:  ((r2 >>> 4) % 20) * 0.1,
+    };
+  });
 }
 
-// Constellation geometry — shared across all card sizes, scaled via s
+// Shield polygon — 10-point crest shape
+const SHIELD_CLIP = "polygon(50% 1%,94% 10%,100% 20%,100% 74%,79% 93%,50% 100%,21% 93%,0% 74%,0% 20%,6% 10%)";
+
+// Constellation network lines (normalised 0–1, scaled at render time)
 const CONST_LINES = [
   [[0.08,0.04],[0.32,0.13],[0.58,0.06],[0.82,0.11]],
   [[0.32,0.13],[0.50,0.24],[0.68,0.18]],
@@ -521,184 +520,255 @@ const CONST_DOTS = [
 ];
 const BRIGHT_STARS = [[0.58,0.06],[0.32,0.13],[0.82,0.11],[0.50,0.24]];
 
-// Tier icon for left-edge badge
+// Tier icon (hex badge)
 const TIER_ICON: Record<string,string> = {
   "Mythic":"🔥","CT Legend":"👑","CT Elite":"⚡","CT Star":"🌊","CT Player":"⚽",
 };
 
 function ShieldCard({ card, size="large", onClick = undefined }: { card: any; size?: string; onClick?: any }) {
   const [hovStat, setHovStat] = useState<string|null>(null);
-  const t        = card.tier;
-  const isLg     = size === "large";
-  const W        = isLg ? 280 : 175;
-  const H        = isLg ? 400 : 250;
-  const s        = isLg ? 1 : 0.625;
-  const r        = Math.round(16*s);
-  const statDefs = getStatDefs(card.position?.code ?? "CM");
-  const VW = 280, VH = 180; // SVG viewbox for constellation
+  const t    = card.tier;
+  const isLg = size === "large";
+  const W    = isLg ? 270 : 170;
+  const H    = isLg ? 395 : 248;
+  const s    = isLg ? 1 : 0.63;
+  const fx   = TIER_FX[t.name] ?? TIER_FX["CT Player"];
+  const VW = 270, VH = 180;
+
+  const particles = useMemo(
+    () => seedParticles(card.handle || "ct", fx.particles),
+    [card.handle, fx.particles]
+  );
 
   return (
-    <div onClick={onClick}
-      onMouseEnter={e=>{ if(onClick)(e.currentTarget as HTMLElement).style.transform="scale(1.04)"; }}
-      onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.transform="scale(1)"; }}
-      style={{width:W,height:H,flexShrink:0,position:"relative",overflow:"hidden",
-        borderRadius:r,cursor:onClick?"pointer":"default",userSelect:"none",
-        fontFamily:"'Segoe UI',system-ui,sans-serif",transition:"transform 0.2s",
-        boxShadow:`0 0 ${Math.round(32*s)}px ${t.glow}55, 0 12px 40px rgba(0,0,0,0.85)`,
+    // Wrapper carries the drop-shadow (respects clip-path shape)
+    <div style={{
+      width:W, height:H, flexShrink:0, position:"relative",
+      cursor: onClick ? "pointer" : "default",
+      userSelect:"none",
+      transition:"transform 0.22s, filter 0.22s",
+      filter:`drop-shadow(0 0 ${Math.round(22*s)}px ${t.glow}77) drop-shadow(0 ${Math.round(10*s)}px ${Math.round(30*s)}px rgba(0,0,0,0.9))`,
+    }}
+    onMouseEnter={e=>{ if(onClick)(e.currentTarget as HTMLElement).style.transform="scale(1.05) translateY(-3px)"; }}
+    onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.transform="scale(1) translateY(0)"; }}
+    onClick={onClick}>
+
+      {/* ── Shield body (clipped) ── */}
+      <div style={{
+        position:"absolute", inset:0,
+        clipPath: SHIELD_CLIP,
+        overflow:"hidden",
+        fontFamily:"'Segoe UI',system-ui,sans-serif",
       }}>
 
-      {/* ── 1. Background gradient ── */}
-      <div style={{position:"absolute",inset:0,
-        background:`linear-gradient(175deg,${t.bg} 0%,${t.bgDark} 55%,#000 100%)`,
-        zIndex:0}}/>
+        {/* L0 · Background gradient */}
+        <div style={{position:"absolute",inset:0,zIndex:0,
+          background:`linear-gradient(170deg,${t.bg} 0%,${t.bgDark} 52%,#020408 100%)`}}/>
 
-      {/* ── 2. Top radial glow ── */}
-      <div style={{position:"absolute",top:"-15%",left:"50%",transform:"translateX(-50%)",
-        width:"90%",height:"55%",
-        background:`radial-gradient(ellipse at 50% 0%,${t.accent}28 0%,transparent 70%)`,
-        zIndex:1,pointerEvents:"none"}}/>
+        {/* L1 · Top radial glow (behind avatar) */}
+        <div style={{position:"absolute",top:"-5%",left:"50%",transform:"translateX(-50%)",
+          width:"110%",height:"60%",zIndex:1,pointerEvents:"none",
+          background:`radial-gradient(ellipse at 50% 10%,${t.accent}2e 0%,${t.accent}10 35%,transparent 70%)`}}/>
 
-      {/* ── 3. Constellation SVG ── */}
-      <svg style={{position:"absolute",top:0,left:0,width:"100%",height:`${Math.round(H*0.62)}px`,
-        zIndex:2,opacity:0.45}} viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice">
-        {CONST_LINES.map((seg,i)=>(
-          <polyline key={i}
-            points={seg.map(([x,y])=>`${x*VW},${y*VH}`).join(" ")}
-            fill="none" stroke={t.border} strokeWidth="0.7" opacity="0.7"/>
+        {/* L2 · Constellation SVG network */}
+        <svg style={{position:"absolute",inset:0,width:"100%",height:`${Math.round(H*0.65)}px`,
+          zIndex:2,opacity:fx.particles>0?0.55:0.3}} viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice">
+          {CONST_LINES.map((seg,i)=>(
+            <polyline key={i} points={seg.map(([x,y])=>`${x*VW},${y*VH}`).join(" ")}
+              fill="none" stroke={t.border} strokeWidth="0.65" opacity="0.7"/>
+          ))}
+          {CONST_DOTS.map(([x,y],i)=>(
+            <circle key={i} cx={x*VW} cy={y*VH} r="1.3" fill={t.accent} opacity="0.72"/>
+          ))}
+          {BRIGHT_STARS.map(([x,y],i)=>(
+            <circle key={`b${i}`} cx={x*VW} cy={y*VH} r="2.6" fill={t.accent} opacity="0.5"/>
+          ))}
+          {/* CT Elite / Mythic extra network density */}
+          {fx.particles > 10 && [
+            [[0.22,0.35],[0.42,0.45],[0.60,0.38]],
+            [[0.70,0.30],[0.85,0.42],[0.78,0.55]],
+            [[0.12,0.55],[0.30,0.62]],
+          ].map((seg,i)=>(
+            <polyline key={`x${i}`} points={seg.map(([x,y])=>`${x*VW},${y*VH}`).join(" ")}
+              fill="none" stroke={t.accent} strokeWidth="0.4" opacity="0.4"/>
+          ))}
+        </svg>
+
+        {/* L3 · Particles (CT Star+) */}
+        {particles.map((p,i)=>(
+          <div key={i} style={{
+            position:"absolute",left:`${p.x}%`,top:`${p.y}%`,
+            width:Math.round(p.size*s),height:Math.round(p.size*s),borderRadius:"50%",
+            background:t.accent,opacity:p.op,zIndex:3,
+            animation:`ppulse ${p.dur}s ${p.del}s ease-in-out infinite`,
+          }}/>
         ))}
-        {CONST_DOTS.map(([x,y],i)=>(
-          <circle key={i} cx={x*VW} cy={y*VH} r="1.4" fill={t.accent} opacity="0.75"/>
-        ))}
-        {BRIGHT_STARS.map(([x,y],i)=>(
-          <circle key={`s${i}`} cx={x*VW} cy={y*VH} r="2.8" fill={t.accent} opacity="0.55"/>
-        ))}
-      </svg>
 
-      {/* ── 4. Metallic card border overlay ── */}
-      <div style={{position:"absolute",inset:0,borderRadius:r,zIndex:20,pointerEvents:"none",
-        boxShadow:`inset 0 0 0 ${Math.max(1,Math.round(2*s))}px ${t.border}`,
-      }}/>
-
-      {/* ── 5. OVR + Position (top-left) ── */}
-      <div style={{position:"absolute",top:Math.round(11*s),left:Math.round(11*s),zIndex:15,lineHeight:1}}>
-        <div style={{fontSize:Math.round(48*s),fontWeight:900,color:"#fff",lineHeight:0.88,letterSpacing:-1,
-          textShadow:`0 2px ${Math.round(12*s)}px rgba(0,0,0,0.8), 0 0 ${Math.round(20*s)}px ${t.glow}66`}}>
-          {card.ovr}
-        </div>
-        <div style={{fontSize:Math.round(13*s),fontWeight:800,color:t.accent,letterSpacing:1,
-          marginTop:Math.round(4*s),textShadow:`0 0 ${Math.round(8*s)}px ${t.glow}`}}>
-          {card.position?.code ?? "MID"}
-        </div>
-      </div>
-
-      {/* ── 6. Left-edge badges ── */}
-      <div style={{position:"absolute",left:Math.round(11*s),top:Math.round(82*s),zIndex:15,
-        display:"flex",flexDirection:"column",gap:Math.round(5*s)}}>
-        {/* Tier badge */}
-        <div style={{width:Math.round(22*s),height:Math.round(22*s),borderRadius:Math.round(5*s),
-          background:`linear-gradient(135deg,${t.border}55,${t.bg})`,
-          border:`1px solid ${t.border}80`,
-          display:"flex",alignItems:"center",justifyContent:"center",
-          fontSize:Math.round(12*s),boxShadow:`0 0 ${Math.round(8*s)}px ${t.glow}44`}}>
-          {TIER_ICON[t.name] ?? "⚽"}
-        </div>
-        {/* Verified badge */}
-        {card.rawProfile?.verified && (
-          <div style={{width:Math.round(22*s),height:Math.round(22*s),borderRadius:Math.round(5*s),
-            background:"#1D9BF0",display:"flex",alignItems:"center",justifyContent:"center",
-            fontSize:Math.round(11*s),fontWeight:900,color:"#fff",
-            boxShadow:`0 0 ${Math.round(8*s)}px #1D9BF066`}}>✓</div>
-        )}
-      </div>
-
-      {/* ── 7. Avatar — large portrait-style, fades into bottom panel ── */}
-      <div style={{position:"absolute",top:Math.round(8*s),left:"50%",transform:"translateX(-28%)",
-        width:Math.round(165*s),height:Math.round(205*s),
-        zIndex:10,overflow:"hidden",borderRadius:Math.round(4*s)}}>
-        {card.avatarUrl ? (
-          <img src={card.avatarUrl} alt={card.displayName}
-            style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"top center",
-              WebkitMaskImage:`linear-gradient(180deg,#000 50%,transparent 95%)`,
-              maskImage:`linear-gradient(180deg,#000 50%,transparent 95%)`,
-              display:"block"}}/>
-        ) : (
-          <div style={{width:"100%",height:"100%",
-            background:`linear-gradient(160deg,${aColor(card.displayName)},${t.bgDark})`,
-            display:"flex",alignItems:"center",justifyContent:"center",
-            fontSize:Math.round(48*s),fontWeight:900,color:"rgba(255,255,255,0.85)",
-            WebkitMaskImage:`linear-gradient(180deg,#000 50%,transparent 95%)`,
-            maskImage:`linear-gradient(180deg,#000 50%,transparent 95%)`}}>
-            {inits(card.displayName)}
-          </div>
-        )}
-      </div>
-
-      {/* ── 8. Bottom panel — dark overlay with name + stats ── */}
-      <div style={{position:"absolute",bottom:0,left:0,right:0,zIndex:12,
-        background:`linear-gradient(180deg,transparent 0%,${t.bgDark}dd 22%,${t.bgDark}f8 50%,#000e 100%)`,
-        padding:`${Math.round(22*s)}px ${Math.round(10*s)}px ${Math.round(9*s)}px`,
-        borderTop:`1px solid ${t.border}25`}}>
-
-        {/* Player name */}
-        <div style={{textAlign:"center",marginBottom:Math.round(6*s)}}>
-          <div style={{fontSize:Math.round(15*s),fontWeight:900,color:"#fff",letterSpacing:0.5,
-            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
-            textShadow:`0 0 ${Math.round(14*s)}px ${t.glow}88`}}>
-            {card.displayName}
+        {/* L4 · Top title band — "CTWC / TIER" */}
+        <div style={{position:"absolute",top:0,left:0,right:0,zIndex:8,textAlign:"center",
+          padding:`${Math.round(11*s)}px 0 ${Math.round(5*s)}px`,
+          background:`linear-gradient(180deg,${t.bgDark}bb 0%,transparent 100%)`}}>
+          <div style={{fontSize:Math.round(7.5*s),fontWeight:700,color:t.accent,
+            letterSpacing:Math.round(4*s),opacity:0.75}}>CTWC</div>
+          <div style={{fontSize:Math.round(9*s),fontWeight:900,color:"#fff",
+            letterSpacing:Math.round(6*s),textTransform:"uppercase",
+            textShadow:`0 0 ${Math.round(10*s)}px ${t.glow}`}}>
+            {t.name.replace("CT ","").toUpperCase()}
           </div>
         </div>
 
-        {/* Divider */}
-        <div style={{height:1,background:`linear-gradient(90deg,transparent,${t.border}60,transparent)`,
-          marginBottom:Math.round(6*s)}}/>
-
-        {/* Stats row */}
-        <div style={{display:"flex",justifyContent:"space-around",position:"relative"}}>
-          {statDefs.map(sd => {
-            const val = card.stats?.[sd.stat] ?? 60;
-            return (
-              <div key={sd.k} style={{textAlign:"center",position:"relative"}}
-                onMouseEnter={()=>isLg&&setHovStat(sd.k)}
-                onMouseLeave={()=>setHovStat(null)}>
-                {hovStat===sd.k && (
-                  <div style={{position:"absolute",bottom:"calc(100% + 8px)",left:"50%",transform:"translateX(-50%)",
-                    background:"rgba(0,0,0,0.95)",border:`1px solid ${t.border}80`,color:"#fff",
-                    fontSize:9,padding:"5px 9px",borderRadius:6,whiteSpace:"nowrap",zIndex:200,
-                    boxShadow:`0 4px 20px rgba(0,0,0,0.8),0 0 12px ${t.glow}33`,pointerEvents:"none"}}>
-                    <span style={{color:t.accent,fontWeight:800}}>{sd.k}</span>{" · "}{sd.tip}
-                  </div>
-                )}
-                <div style={{fontSize:Math.round(8*s),color:t.accent,fontWeight:700,
-                  letterSpacing:0.5,opacity:0.85,marginBottom:Math.round(1*s)}}>{sd.k}</div>
-                <div style={{fontSize:Math.round(20*s),fontWeight:900,color:"#fff",lineHeight:1,
-                  textShadow:`0 0 ${Math.round(8*s)}px ${t.glow}66`}}>{val}</div>
-              </div>
-            );
-          })}
+        {/* L5 · OVR + position + handle (top-left) */}
+        <div style={{position:"absolute",top:Math.round(36*s),left:Math.round(12*s),zIndex:10}}>
+          <div style={{fontSize:Math.round(50*s),fontWeight:900,lineHeight:0.86,color:"#fff",letterSpacing:-2,
+            textShadow:`0 2px ${Math.round(10*s)}px rgba(0,0,0,0.95),0 0 ${Math.round(22*s)}px ${t.glow}88`}}>
+            {card.ovr}
+          </div>
+          <div style={{fontSize:Math.round(11*s),fontWeight:900,color:t.accent,letterSpacing:1.5,
+            marginTop:Math.round(3*s),textShadow:`0 0 ${Math.round(8*s)}px ${t.glow}`}}>
+            {card.position?.code ?? "MID"}
+          </div>
+          {/* X handle */}
+          <div style={{display:"flex",alignItems:"center",gap:Math.round(3*s),marginTop:Math.round(7*s)}}>
+            <span style={{fontSize:Math.round(9*s),color:"rgba(255,255,255,0.5)",fontWeight:700}}>𝕏</span>
+            <span style={{fontSize:Math.round(7.5*s),color:"rgba(255,255,255,0.45)",fontFamily:"monospace",
+              maxWidth:Math.round(52*s),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              @{card.handle}
+            </span>
+            {card.rawProfile?.verified && (
+              <span style={{fontSize:Math.round(8*s),color:"#1D9BF0",flexShrink:0}}>✓</span>
+            )}
+          </div>
         </div>
 
-        {/* Footer branding */}
-        <div style={{display:"flex",justifyContent:"center",alignItems:"center",
-          gap:Math.round(6*s),marginTop:Math.round(6*s)}}>
-          <span style={{fontSize:Math.round(9*s),color:t.border,opacity:0.55,fontWeight:700}}>𝕏</span>
-          <div style={{height:Math.round(8*s),width:1,background:`${t.border}30`}}/>
-          <span style={{fontSize:Math.round(7*s),color:t.accent,opacity:0.4,letterSpacing:2,
-            fontWeight:700,textTransform:"uppercase"}}>CTWC 2026</span>
-          <div style={{height:Math.round(8*s),width:1,background:`${t.border}30`}}/>
-          <span style={{fontSize:Math.round(8*s),color:t.border,opacity:0.45}}>
-            {t.name==="Mythic"?"✦":t.name==="CT Legend"?"✦✦":t.name==="CT Elite"?"✦✦✦":"✦"}
-          </span>
+        {/* L6 · Glow orb behind avatar */}
+        <div style={{position:"absolute",
+          top:Math.round(18*s),left:"55%",transform:"translateX(-50%)",
+          width:Math.round(190*s),height:Math.round(190*s),borderRadius:"50%",zIndex:4,
+          pointerEvents:"none",
+          background:`radial-gradient(circle,${t.accent}30 0%,${t.accent}12 40%,transparent 70%)`,
+          filter:`blur(${Math.round(12*s)}px)`}}/>
+
+        {/* L7 · Avatar — portrait crop, fades into bottom panel */}
+        <div style={{position:"absolute",
+          top:Math.round(16*s),left:"54%",transform:"translateX(-50%)",
+          width:Math.round(148*s),height:Math.round(185*s),
+          zIndex:6,overflow:"hidden",borderRadius:Math.round(6*s)}}>
+          {card.avatarUrl ? (
+            <img src={card.avatarUrl} alt={card.displayName} style={{
+              width:"100%",height:"100%",
+              objectFit:"cover",objectPosition:"top center",
+              display:"block",
+              filter:`brightness(1.06) contrast(1.10) saturate(1.12)`,
+              WebkitMaskImage:`linear-gradient(180deg,#000 45%,rgba(0,0,0,0.7) 68%,transparent 92%)`,
+              maskImage:`linear-gradient(180deg,#000 45%,rgba(0,0,0,0.7) 68%,transparent 92%)`,
+            }}/>
+          ) : (
+            <div style={{width:"100%",height:"100%",
+              background:`linear-gradient(150deg,${aColor(card.displayName)} 0%,${t.bgDark} 100%)`,
+              display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:"15%",
+              WebkitMaskImage:`linear-gradient(180deg,#000 45%,transparent 92%)`,
+              maskImage:`linear-gradient(180deg,#000 45%,transparent 92%)`}}>
+              <span style={{fontSize:Math.round(52*s),fontWeight:900,color:"rgba(255,255,255,0.88)"}}>
+                {inits(card.displayName)}
+              </span>
+            </div>
+          )}
         </div>
+
+        {/* L8 · Hex tier badge (left, mid-card) */}
+        <div style={{position:"absolute",left:Math.round(10*s),top:Math.round(148*s),zIndex:10}}>
+          <svg width={Math.round(36*s)} height={Math.round(40*s)} viewBox="0 0 36 40">
+            <polygon points="18,1 35,10 35,30 18,39 1,30 1,10"
+              fill={t.bgDark} stroke={t.border} strokeWidth="1.5"
+              style={{filter:`drop-shadow(0 0 5px ${t.glow}77)`}}/>
+            <text x="18" y="26" textAnchor="middle" fontSize="17" fontFamily="system-ui">{TIER_ICON[t.name]}</text>
+          </svg>
+        </div>
+
+        {/* L9 · Bottom dark panel — name + stats */}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,zIndex:9,
+          padding:`${Math.round(16*s)}px ${Math.round(10*s)}px ${Math.round(14*s)}px`,
+          background:`linear-gradient(180deg,transparent 0%,${t.bgDark}e0 16%,${t.bgDark}f9 40%,#010205 100%)`}}>
+
+          {/* Name */}
+          <div style={{textAlign:"center",marginBottom:Math.round(5*s)}}>
+            <div style={{fontSize:Math.round(17*s),fontWeight:900,color:"#fff",
+              textTransform:"uppercase",letterSpacing:Math.round(1.5*s),
+              textShadow:`0 0 ${Math.round(18*s)}px ${t.glow}99`,
+              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {card.displayName}
+            </div>
+          </div>
+
+          {/* Gradient divider */}
+          <div style={{height:1,margin:`0 ${Math.round(6*s)}px ${Math.round(6*s)}px`,
+            background:`linear-gradient(90deg,transparent,${t.border}88,transparent)`}}/>
+
+          {/* CT Stats row */}
+          <div style={{display:"flex",justifyContent:"space-around"}}>
+            {CT_STATS.map(sd=>{
+              const val = card.stats?.[sd.stat] ?? 60;
+              return (
+                <div key={sd.k} style={{textAlign:"center",position:"relative"}}
+                  onMouseEnter={()=>isLg&&setHovStat(sd.k)}
+                  onMouseLeave={()=>setHovStat(null)}>
+                  {hovStat===sd.k&&(
+                    <div style={{position:"absolute",bottom:"calc(100% + 8px)",left:"50%",
+                      transform:"translateX(-50%)",
+                      background:"rgba(0,0,0,0.96)",border:`1px solid ${t.border}99`,
+                      color:"#fff",fontSize:9,padding:"5px 10px",borderRadius:7,
+                      whiteSpace:"nowrap",zIndex:200,
+                      boxShadow:`0 4px 20px rgba(0,0,0,0.85),0 0 14px ${t.glow}33`,
+                      pointerEvents:"none"}}>
+                      <span style={{color:t.accent,fontWeight:800}}>{sd.k}</span>{" · "}{sd.tip}
+                    </div>
+                  )}
+                  <div style={{fontSize:Math.round(7*s),color:t.accent,fontWeight:700,
+                    letterSpacing:0.4,opacity:0.9,marginBottom:Math.round(1*s)}}>{sd.k}</div>
+                  <div style={{fontSize:Math.round(19*s),fontWeight:900,color:"#fff",lineHeight:1,
+                    textShadow:`0 0 ${Math.round(8*s)}px ${t.glow}66`}}>{val}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footer — CTWC branding + tier stars */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+            marginTop:Math.round(7*s),paddingTop:Math.round(5*s),
+            borderTop:`1px solid ${t.border}22`}}>
+            <span style={{fontSize:Math.round(7*s),fontWeight:700,color:t.accent,
+              opacity:0.45,letterSpacing:1.5}}>CTWC 2026</span>
+            <span style={{fontSize:Math.round(8*s),color:t.border,opacity:0.5,letterSpacing:1}}>
+              {"✦".repeat(
+                t.name==="Mythic"?5:t.name==="CT Legend"?4:t.name==="CT Elite"?3:t.name==="CT Star"?2:1
+              )}
+            </span>
+            <span style={{fontSize:Math.round(7*s),fontWeight:700,color:t.accent,
+              opacity:0.45,letterSpacing:1}}>S1</span>
+          </div>
+        </div>
+
+        {/* L10 · Inner border glow (inside clip-path) */}
+        <div style={{position:"absolute",inset:0,zIndex:15,pointerEvents:"none",
+          boxShadow:`inset 0 0 0 ${Math.max(1,Math.round(2*s))}px ${t.border}cc,
+                     inset 0 0 ${Math.round(24*s)}px ${t.glow}18`}}/>
+
+        {/* L11 · Shimmer sweep (CT Legend + Mythic) */}
+        {(t.name==="CT Legend"||t.name==="Mythic")&&(
+          <div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:16,overflow:"hidden"}}>
+            <div style={{position:"absolute",top:0,left:"-100%",width:"55%",height:"100%",
+              background:"linear-gradient(105deg,transparent 20%,rgba(255,255,255,0.065) 50%,transparent 80%)",
+              animation:"shimmer 3.5s infinite linear"}}/>
+          </div>
+        )}
+
+        {/* L12 · Grain overlay (CT Legend) */}
+        {fx.grain&&(
+          <div style={{position:"absolute",inset:0,zIndex:17,pointerEvents:"none",opacity:0.06,
+            backgroundImage:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+            backgroundSize:"180px 180px"}}/>
+        )}
       </div>
-
-      {/* ── 9. Shimmer sweep for CT Legend + Mythic ── */}
-      {(t.name==="CT Legend"||t.name==="Mythic") && (
-        <div style={{position:"absolute",inset:0,pointerEvents:"none",overflow:"hidden",borderRadius:r,zIndex:19}}>
-          <div style={{position:"absolute",top:0,left:"-100%",width:"55%",height:"100%",
-            background:"linear-gradient(105deg,transparent 20%,rgba(255,255,255,0.06) 50%,transparent 80%)",
-            animation:"shimmer 3.5s infinite linear"}}/>
-        </div>
-      )}
     </div>
   );
 }
