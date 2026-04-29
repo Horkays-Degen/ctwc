@@ -66,13 +66,34 @@ function EmblemImg({ team, size = 20, style = {} }) {
 }
 
 // ─── SOUND ENGINE (Web Audio API — no external files) ─────────
-let _actx = null;
-function getCtx() {
+let _actx: AudioContext | null = null;
+// Pre-generated noise buffer — created once on first warm-up, reused forever.
+// Generating it on-demand inside crowd() blocked the main thread and caused
+// the visual/audio lag the user noticed during card reveal.
+let _noiseBuf: AudioBuffer | null = null;
+
+function getCtx(): AudioContext | null {
   try {
     if (!_actx) _actx = new (window.AudioContext || (window as any).webkitAudioContext)();
     if (_actx.state === "suspended") _actx.resume();
     return _actx;
   } catch(e) { return null; }
+}
+
+// Call this on any user interaction before the reveal (e.g. "Join Team" click).
+// Creates the AudioContext and fills the noise buffer off the hot path.
+function warmAudio() {
+  const c = getCtx(); if (!c) return;
+  if (_noiseBuf) return; // already warm
+  // 3 seconds of stereo white noise at half sample-rate (22 kHz) — fast to fill
+  const sr  = Math.floor(c.sampleRate / 2);
+  const sz  = sr * 3;
+  const buf = c.createBuffer(2, sz, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < sz; i++) d[i] = Math.random() * 2 - 1;
+  }
+  _noiseBuf = buf;
 }
 
 const SFX = {
@@ -97,15 +118,10 @@ const SFX = {
     if (this.muted) return;
     const c = getCtx(); if (!c) return;
     const dur = phase === "build" ? 2.0 : phase === "roar" ? 0.9 : 2.8;
-    // Use half sample rate (22kHz) — crowd noise is low-frequency, quality is identical
-    // and buffer creation is 2× faster, eliminating the frame drop on reveal
-    const sr  = Math.floor(c.sampleRate / 2);
-    const sz  = Math.ceil((dur + 0.5) * sr);
-    const buf = c.createBuffer(2, sz, sr);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = buf.getChannelData(ch);
-      for (let i = 0; i < sz; i++) d[i] = Math.random() * 2 - 1;
-    }
+    // Use the pre-warmed noise buffer — zero CPU cost on the hot path.
+    // Falls back to inline generation only if warmAudio() was never called.
+    if (!_noiseBuf) warmAudio();
+    const buf = _noiseBuf!;
     // Multiple bandpass voice layers — low rumble, mid voices, high excitement
     const bands = phase === "roar"
       ? [{f:180,q:2.5,vol:0.18},{f:420,q:2,vol:0.22},{f:900,q:1.8,vol:0.17},{f:2200,q:1.5,vol:0.09}]
@@ -151,7 +167,7 @@ const SFX = {
     if (this.muted) return;
     const c = getCtx(); if (!c) return;
     const t = c.currentTime;
-    const note = (freq, start, dur, type = "sine", vol = 0.22) => {
+    const note = (freq, start, dur, type: OscillatorType = "sine", vol = 0.22) => {
       const o = c.createOscillator(), g = c.createGain();
       o.type = type; o.frequency.setValueAtTime(freq, t + start);
       g.gain.setValueAtTime(0, t + start);
@@ -1411,6 +1427,7 @@ function BrowseTeamsPage({ card, teams, onJoined, onBack }) {
   const join = (team) => {
     if (team.memberIds.length >= 11) return;
     SFX.click();
+    warmAudio(); // pre-fill noise buffer now so reveal has zero lag
     setJoining(team.id);
     setTimeout(() => {
       const updated = addCardToTeam(team, card);
@@ -2675,6 +2692,7 @@ export default function CTWCApp() {
         setMyCardId(card.id);
         await loadData();
         if (justClaimed) {
+          warmAudio();
           setPage("reveal");
         } else if (data.team_id) {
           setViewTeamId(data.team_id);
@@ -2721,6 +2739,7 @@ export default function CTWCApp() {
       const card = transformCard(data.card);
       setPending(card);
       setMyCardId(card.id);
+      warmAudio(); // pre-fill noise buffer before reveal mounts
       setPage("reveal");
     } catch (e) {
       setMintError("Network error — try again");
