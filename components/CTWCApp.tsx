@@ -800,12 +800,12 @@ function CardReveal({ card, onDone }) {
   }))).current;
 
   useEffect(()=>{
-    // Defer first audio call by 80ms so the pack animation renders before
-    // the noise buffer is generated (buffer fill was blocking the first frame)
-    const t0 = setTimeout(()=> SFX.crowd("build"), 80);
-    const t1 = setTimeout(()=>{ setPhase("rip");  SFX.crowd("roar"); }, 1900);
-    const t2 = setTimeout(()=>{ setPhase("reveal"); SFX.reveal(t.name); }, 2250);
-    const t3 = setTimeout(()=>{ setPhase("done"); onDone?.(); }, 4600);
+    // Tightened timing so sound fires exactly when the visual transition hits
+    // pack renders → crowd build immediately → rip at 1600ms → reveal at 1820ms (rip anim is 220ms)
+    const t0 = setTimeout(()=> SFX.crowd("build"), 0);
+    const t1 = setTimeout(()=>{ setPhase("rip");    SFX.crowd("roar"); },   1600);
+    const t2 = setTimeout(()=>{ setPhase("reveal"); SFX.reveal(t.name); }, 1820);
+    const t3 = setTimeout(()=>{ setPhase("done");   onDone?.(); },           4200);
     return()=>{ clearTimeout(t0); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   },[]);
 
@@ -924,24 +924,55 @@ function CardReveal({ card, onDone }) {
 // ─── PITCH NODE ───────────────────────────────────────────────
 function PitchNode({ ps, card, isCapt, isSelected, captMode, onClick }) {
   const r=26, {x,y}=ps;
-  const av=card?aColor(card.displayName):null;
   const t=card?.tier;
+  const clipId=`pclip-${ps.pos}-${x}-${y}`;
   return (
     <g onClick={onClick} style={{cursor:card?"pointer":"default"}}>
+      {/* Selection rings */}
       {isSelected&&<circle cx={x} cy={y} r={r+10} fill={t?.accent||"#fff"} opacity="0.2"/>}
       {isSelected&&<circle cx={x} cy={y} r={r+7}  fill="none" stroke={t?.accent||"#fff"} strokeWidth="2" opacity="0.8" strokeDasharray="4 2"/>}
-      <circle cx={x} cy={y} r={r+2} fill="rgba(0,0,0,0.3)"/>
-      <circle cx={x} cy={y} r={r} fill={card?av:"rgba(255,255,255,0.04)"} stroke={card?t.border:"rgba(255,255,255,0.2)"} strokeWidth={card?2:1.5} strokeDasharray={card?"0":"5 3"}/>
-      {card?(
+
+      {/* Drop shadow ring */}
+      <circle cx={x} cy={y} r={r+2} fill="rgba(0,0,0,0.45)"/>
+
+      {card ? (
         <>
-          <text x={x} y={y-5}  fontSize="13" fontWeight="800" fill="#fff" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{inits(card.displayName)}</text>
-          <text x={x} y={y+10} fontSize="9"  fontWeight="700" fill={t.textColor} fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle" opacity="0.9">{card.ovr}</text>
-          <rect x={x-14} y={y+r} width="28" height="13" rx="4" fill="rgba(0,0,0,0.75)"/>
-          <text x={x} y={y+r+9} fontSize="7.5" fontWeight="700" fill={t.textColor} fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{ps.pos}</text>
-          {isCapt&&<text x={x} y={y-r-5} fontSize="13" textAnchor="middle">👑</text>}
+          {/* Clip circle for avatar */}
+          <defs>
+            <clipPath id={clipId}>
+              <circle cx={x} cy={y} r={r}/>
+            </clipPath>
+          </defs>
+          {/* Tier-coloured bg behind avatar (fallback if img fails) */}
+          <circle cx={x} cy={y} r={r} fill={t.bg}/>
+          {/* Avatar photo, clipped to circle */}
+          {card.avatarUrl ? (
+            <image
+              href={card.avatarUrl}
+              x={x-r} y={y-r} width={r*2} height={r*2}
+              clipPath={`url(#${clipId})`}
+              preserveAspectRatio="xMidYMin slice"
+            />
+          ) : (
+            <text x={x} y={y+5} fontSize="13" fontWeight="800" fill="#fff"
+              fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">
+              {inits(card.displayName)}
+            </text>
+          )}
+          {/* Tier-coloured border ring */}
+          <circle cx={x} cy={y} r={r} fill="none" stroke={t.border} strokeWidth="2.5"/>
+          {/* OVR + position label below circle */}
+          <rect x={x-14} y={y+r} width="28" height="13" rx="4" fill="rgba(0,0,0,0.82)"/>
+          <text x={x} y={y+r+9} fontSize="7.5" fontWeight="700" fill={t.textColor}
+            fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{ps.pos}</text>
+          {isCapt&&<text x={x} y={y-r-4} fontSize="13" textAnchor="middle">👑</text>}
         </>
       ):(
-        <text x={x} y={y+5} fontSize="9" fontWeight="600" fill="rgba(255,255,255,0.35)" fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{ps.pos}</text>
+        <>
+          <circle cx={x} cy={y} r={r} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeDasharray="5 3"/>
+          <text x={x} y={y+5} fontSize="9" fontWeight="600" fill="rgba(255,255,255,0.35)"
+            fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">{ps.pos}</text>
+        </>
       )}
     </g>
   );
@@ -1573,7 +1604,18 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
                   <div key={i} onClick={()=>c&&setExpandCard(c)} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:c?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.01)",borderRadius:8,border:c?`1px solid ${c.tier.border}22`:"1px dashed rgba(255,255,255,0.07)",cursor:c?"pointer":"default",transition:"all 0.2s"}}
                     onMouseEnter={e=>{if(c){e.currentTarget.style.background="rgba(255,255,255,0.06)";}}}
                     onMouseLeave={e=>{e.currentTarget.style.background=c?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.01)";}}>
-                    <div style={{width:26,height:26,borderRadius:6,background:c?aColor(c.displayName):"rgba(255,255,255,0.04)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:c?"#fff":"rgba(255,255,255,0.2)",flexShrink:0}}>{c?inits(c.displayName):ps.pos}</div>
+                    <div style={{width:32,height:32,borderRadius:7,overflow:"hidden",flexShrink:0,
+                      background:c?aColor(c.displayName):"rgba(255,255,255,0.04)",
+                      border:c?`1.5px solid ${c.tier.border}66`:"1px dashed rgba(255,255,255,0.1)",
+                      display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {c?(
+                        c.avatarUrl
+                          ? <img src={c.avatarUrl} alt={c.displayName} style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top"}}/>
+                          : <span style={{fontSize:10,fontWeight:800,color:"#fff"}}>{inits(c.displayName)}</span>
+                      ):(
+                        <span style={{fontSize:8,fontWeight:600,color:"rgba(255,255,255,0.2)"}}>{ps.pos}</span>
+                      )}
+                    </div>
                     <div style={{flex:1,minWidth:0}}>
                       {c?(<><div style={{fontSize:11,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.displayName}{c.id===team.captainId&&" 👑"}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.35)",fontFamily:"monospace"}}>@{c.handle}</div></>)
                       :(<div style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontStyle:"italic"}}>Empty slot</div>)}
