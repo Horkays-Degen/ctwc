@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { toPng } from "html-to-image";
 import { createClient } from "@/lib/supabase";
 
 // ─── DATA TRANSFORMS (Supabase rows → UI shape) ───────────────
@@ -767,10 +768,75 @@ function ShieldCard({ card, size="large", onClick = undefined }: { card: any; si
           </div>
         </div>
 
-        {/* L10 · Inner border */}
-        <div style={{position:"absolute",inset:0,zIndex:15,pointerEvents:"none",borderRadius:Math.round(14*s),
-          boxShadow:`inset 0 0 0 ${Math.max(1,Math.round(2*s))}px ${t.border}99,
-                     inset 0 0 ${Math.round(20*s)}px ${t.glow}14`}}/>
+        {/* L10 · Tier frame — thickness, glow, and corner ornaments scale with rarity */}
+        {(() => {
+          // Frame intensity per tier
+          const frameSpec = {
+            "CT Player": { thick: 2, glow: 0.10, double: false, corners: false },
+            "CT Star":   { thick: 2, glow: 0.18, double: false, corners: false },
+            "CT Elite":  { thick: 2, glow: 0.25, double: true,  corners: true  },
+            "CT Legend": { thick: 3, glow: 0.32, double: true,  corners: true  },
+            "Mythic":    { thick: 3, glow: 0.40, double: true,  corners: true  },
+          }[t.name as string] || { thick: 2, glow: 0.10, double: false, corners: false };
+
+          const px  = Math.max(1, Math.round(frameSpec.thick * s));
+          const px2 = Math.max(1, Math.round((frameSpec.thick + 2) * s));
+          const r   = Math.round(14 * s);
+          const cornerSize = Math.round(18 * s);
+          const cornerThick = Math.max(1.5, Math.round(2 * s));
+
+          return (
+            <>
+              {/* Outer ring — main tier border */}
+              <div style={{position:"absolute",inset:0,zIndex:15,pointerEvents:"none",borderRadius:r,
+                boxShadow:`inset 0 0 0 ${px}px ${t.border},
+                           inset 0 0 ${Math.round(22*s)}px ${t.glow}${Math.round(frameSpec.glow*255).toString(16).padStart(2,"0")}`}}/>
+
+              {/* Inner ring — second pinstripe for Elite+ rarities */}
+              {frameSpec.double && (
+                <div style={{position:"absolute",inset:Math.round(4*s),zIndex:15,pointerEvents:"none",
+                  borderRadius:Math.round(10*s),
+                  boxShadow:`inset 0 0 0 1px ${t.accent}66`}}/>
+              )}
+
+              {/* Corner ornaments — L-shaped accents for Elite+ */}
+              {frameSpec.corners && (
+                <>
+                  {[
+                    {top:Math.round(7*s),left:Math.round(7*s),    bt:1,bb:0,bl:1,br:0},
+                    {top:Math.round(7*s),right:Math.round(7*s),   bt:1,bb:0,bl:0,br:1},
+                    {bottom:Math.round(7*s),left:Math.round(7*s), bt:0,bb:1,bl:1,br:0},
+                    {bottom:Math.round(7*s),right:Math.round(7*s),bt:0,bb:1,bl:0,br:1},
+                  ].map((p,i)=>{
+                    const {bt,bb,bl,br,...pos} = p as any;
+                    return (
+                      <div key={i} style={{
+                        position:"absolute",zIndex:16,pointerEvents:"none",
+                        width:cornerSize,height:cornerSize,
+                        ...pos,
+                        borderTop:bt?`${cornerThick}px solid ${t.accent}`:"none",
+                        borderBottom:bb?`${cornerThick}px solid ${t.accent}`:"none",
+                        borderLeft:bl?`${cornerThick}px solid ${t.accent}`:"none",
+                        borderRight:br?`${cornerThick}px solid ${t.accent}`:"none",
+                        filter:`drop-shadow(0 0 ${Math.round(4*s)}px ${t.accent})`,
+                        opacity:0.92,
+                      }}/>
+                    );
+                  })}
+                </>
+              )}
+
+              {/* Animated outer glow ring (Mythic only) */}
+              {t.name === "Mythic" && (
+                <div style={{position:"absolute",inset:-2,zIndex:14,pointerEvents:"none",
+                  borderRadius:r+2,
+                  background:`conic-gradient(from 0deg, ${t.accent}, ${t.border}, ${t.accent}, ${t.border}, ${t.accent})`,
+                  filter:"blur(4px)",opacity:0.55,
+                  animation:"holoSweep 5s linear infinite"}}/>
+              )}
+            </>
+          );
+        })()}
 
         {/* L11 · Shimmer sweep (CT Legend + Mythic) */}
         {(t.name==="CT Legend"||t.name==="Mythic")&&(
@@ -973,7 +1039,71 @@ const TIER_BADGES = {
 // Inspired by FUT card inspectors. Pure CSS transforms — no library.
 function InteractiveCard({ card, size = "large", scale = 1 }: { card: any; size?: string; scale?: number }) {
   const [tilt, setTilt] = useState({ rx: 0, ry: 0, mx: 50, my: 50, active: false });
+  const [busy, setBusy] = useState<null | "dl" | "share" | "copy">(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
   const t = card?.tier;
+
+  // Render the card to a PNG data URL (2× pixel ratio for crisp share quality)
+  const renderPng = async (): Promise<string | null> => {
+    if (!captureRef.current) return null;
+    try {
+      return await toPng(captureRef.current, {
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: undefined, // keep transparent so the card glow shows on transparent bg
+        // skip the tilt transform when capturing — capture upright
+        style: { transform: "none" },
+      });
+    } catch (e) {
+      console.warn("toPng failed:", e);
+      return null;
+    }
+  };
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2200);
+  };
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setBusy("dl");
+    const dataUrl = await renderPng();
+    setBusy(null);
+    if (!dataUrl) return showToast("Couldn't render image");
+    const link = document.createElement("a");
+    link.download = `ctwc-${card.handle}.png`;
+    link.href = dataUrl;
+    link.click();
+    showToast("Card saved!");
+  };
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setBusy("copy");
+    const dataUrl = await renderPng();
+    setBusy(null);
+    if (!dataUrl) return showToast("Couldn't render image");
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      // @ts-ignore — ClipboardItem available in modern browsers
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      showToast("Copied to clipboard!");
+    } catch {
+      showToast("Clipboard blocked — try Download");
+    }
+  };
+
+  const handleShareX = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // X doesn't allow direct image upload via URL params, so we open the
+    // tweet composer with prefilled text — user attaches the saved/copied PNG.
+    const text = encodeURIComponent(
+      `Just minted my @CTWC card 🔥\n\n${card.displayName} · ${card.tier.name} · OVR ${card.ovr}\n\n#CTWC2026 #CryptoTwitter`
+    );
+    window.open(`https://twitter.com/intent/tweet?text=${text}`, "_blank");
+  };
 
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -1050,8 +1180,9 @@ function InteractiveCard({ card, size = "large", scale = 1 }: { card: any; size?
         transition: tilt.active ? "transform 0.08s ease-out" : "transform 0.5s cubic-bezier(0.22,1,0.36,1)",
         willChange: "transform",
       }}>
-        {/* Inner scale wrapper — scales the underlying ShieldCard up to fill W×H */}
-        <div style={{
+        {/* Inner scale wrapper — scales the underlying ShieldCard up to fill W×H.
+            captureRef points here so PNG export captures the upright scaled card. */}
+        <div ref={captureRef} style={{
           width: baseW,
           height: baseH,
           transform: `scale(${scale})`,
@@ -1086,6 +1217,79 @@ function InteractiveCard({ card, size = "large", scale = 1 }: { card: any; size?
           transform: "translateZ(1px)",
         }}/>
       </div>
+
+      {/* ── Share toolbar — sits below the card, doesn't tilt ── */}
+      <div style={{
+        position:"absolute",
+        top: H + 28,
+        left: "50%",
+        transform: "translateX(-50%)",
+        display:"flex",gap:10,
+        zIndex:5,
+      }}>
+        <button onClick={handleShareX} disabled={!!busy}
+          title="Share on X"
+          style={{
+            display:"flex",alignItems:"center",gap:8,
+            padding:"10px 18px",fontSize:12,fontWeight:800,letterSpacing:0.5,
+            background:`linear-gradient(135deg, ${accent}, ${t?.border ?? accent})`,
+            border:"none",borderRadius:9,color:"#0a0a0a",cursor:"pointer",
+            boxShadow:`0 0 22px ${accent}88, 0 6px 20px rgba(0,0,0,0.5)`,
+            transition:"transform 0.15s",
+          }}
+          onMouseEnter={e=>(e.currentTarget.style.transform="scale(1.05)")}
+          onMouseLeave={e=>(e.currentTarget.style.transform="scale(1)")}
+        >
+          <span style={{fontSize:13,fontWeight:900}}>𝕏</span>
+          <span>Share on X</span>
+        </button>
+
+        <button onClick={handleDownload} disabled={!!busy}
+          title="Download PNG"
+          style={{
+            display:"flex",alignItems:"center",gap:7,
+            padding:"10px 16px",fontSize:12,fontWeight:700,
+            background:"rgba(255,255,255,0.06)",
+            border:`1px solid ${accent}55`,borderRadius:9,
+            color:"#fff",cursor:"pointer",backdropFilter:"blur(8px)",
+            transition:"all 0.15s",
+          }}
+          onMouseEnter={e=>{ e.currentTarget.style.background=`${accent}22`; }}
+          onMouseLeave={e=>{ e.currentTarget.style.background="rgba(255,255,255,0.06)"; }}
+        >
+          <span>{busy==="dl"?"…":"⬇"}</span>
+          <span>Download</span>
+        </button>
+
+        <button onClick={handleCopy} disabled={!!busy}
+          title="Copy image"
+          style={{
+            display:"flex",alignItems:"center",gap:7,
+            padding:"10px 16px",fontSize:12,fontWeight:700,
+            background:"rgba(255,255,255,0.06)",
+            border:`1px solid ${accent}55`,borderRadius:9,
+            color:"#fff",cursor:"pointer",backdropFilter:"blur(8px)",
+            transition:"all 0.15s",
+          }}
+          onMouseEnter={e=>{ e.currentTarget.style.background=`${accent}22`; }}
+          onMouseLeave={e=>{ e.currentTarget.style.background="rgba(255,255,255,0.06)"; }}
+        >
+          <span>{busy==="copy"?"…":"⧉"}</span>
+          <span>Copy</span>
+        </button>
+      </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <div style={{
+          position:"absolute",top: H + 78,left:"50%",transform:"translateX(-50%)",
+          padding:"7px 14px",fontSize:11,fontWeight:700,letterSpacing:0.5,
+          background:"rgba(0,0,0,0.92)",border:`1px solid ${accent}88`,
+          borderRadius:7,color:accent,zIndex:6,whiteSpace:"nowrap",
+          boxShadow:`0 0 18px ${accent}55`,
+          animation:"holoIn 0.18s cubic-bezier(0.22,1,0.36,1) both",
+        }}>{toast}</div>
+      )}
     </div>
   );
 }
