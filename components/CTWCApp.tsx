@@ -793,7 +793,7 @@ const TIER_BADGES = {
 //   • large radial spotlight glow behind the card that follows the cursor
 //   • specular shine highlight on top of the card that follows the cursor
 // Inspired by FUT card inspectors. Pure CSS transforms — no library.
-function InteractiveCard({ card, size = "large" }: { card: any; size?: string }) {
+function InteractiveCard({ card, size = "large", scale = 1 }: { card: any; size?: string; scale?: number }) {
   const [tilt, setTilt] = useState({ rx: 0, ry: 0, mx: 50, my: 50, active: false });
   const t = card?.tier;
 
@@ -811,10 +811,12 @@ function InteractiveCard({ card, size = "large" }: { card: any; size?: string })
 
   const onLeave = () => setTilt({ rx: 0, ry: 0, mx: 50, my: 50, active: false });
 
-  // Card dimensions (must match ShieldCard's W/H)
+  // Base card dimensions (match ShieldCard's W/H), then scaled
   const isLg = size === "large";
-  const W = isLg ? 260 : 164;
-  const H = isLg ? 380 : 240;
+  const baseW = isLg ? 260 : 164;
+  const baseH = isLg ? 380 : 240;
+  const W = baseW * scale;
+  const H = baseH * scale;
   const accent = t?.accent ?? "#FBBF24";
   const glow   = t?.glow   ?? "rgba(255,255,255,0.4)";
 
@@ -870,7 +872,15 @@ function InteractiveCard({ card, size = "large" }: { card: any; size?: string })
         transition: tilt.active ? "transform 0.08s ease-out" : "transform 0.5s cubic-bezier(0.22,1,0.36,1)",
         willChange: "transform",
       }}>
-        <ShieldCard card={card} size={size}/>
+        {/* Inner scale wrapper — scales the underlying ShieldCard up to fill W×H */}
+        <div style={{
+          width: baseW,
+          height: baseH,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+        }}>
+          <ShieldCard card={card} size={size}/>
+        </div>
 
         {/* Specular shine — bright highlight that follows the cursor */}
         <div style={{
@@ -1769,7 +1779,7 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       {expandCard&&(
         <div onClick={()=>setExpandCard(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",backdropFilter:"blur(16px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-          <InteractiveCard card={expandCard} size="large"/>
+          <InteractiveCard card={expandCard} size="large" scale={1.5}/>
         </div>
       )}
       <Nav onHome={onBack} right={
@@ -1860,7 +1870,7 @@ function PlayerPool({ pool, myCard, onBack, onClaim }) {
 
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-      {selected&&<div onClick={()=>setSelected(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",backdropFilter:"blur(16px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><InteractiveCard card={selected} size="large"/></div>}
+      {selected&&<div onClick={()=>setSelected(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",backdropFilter:"blur(16px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><InteractiveCard card={selected} size="large" scale={1.5}/></div>}
 
       <Nav onHome={onBack} right={
         hasClaimed
