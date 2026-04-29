@@ -787,6 +787,93 @@ const TIER_BADGES = {
   "Mythic":    { icon:"🔥", label:"CT MYTHIC",  bg:"#3D0A0A", text:"#EF4444" },
 };
 
+// ─── REVEAL READY GATE ────────────────────────────────────────
+// Shown after a successful mint, before the actual reveal animation.
+// Required because browser autoplay policy blocks AudioContext from
+// playing until there's a user gesture on the page. After OAuth redirect
+// or programmatic page change, no gesture has happened yet — so a tap here
+// unlocks audio and fires the crowd "build" sound in the same JS task as
+// the transition to the reveal animation.
+function RevealReadyGate({ card, onOpen }: { card: any; onOpen: () => void }) {
+  const t = card.tier;
+  const badge = TIER_BADGES[t.name] || TIER_BADGES["CT Player"];
+  return (
+    <div onClick={onOpen} style={{
+      position:"fixed",inset:0,background:"#04060d",cursor:"pointer",
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+      fontFamily:"'Segoe UI',system-ui,sans-serif",zIndex:200,overflow:"hidden",
+    }}>
+      {/* Stadium glow backdrop */}
+      <div style={{position:"absolute",inset:0,
+        background:`radial-gradient(ellipse 70% 50% at 50% 55%, ${t.accent}22 0%, transparent 70%)`,
+        pointerEvents:"none"}}/>
+
+      {/* Pulsing tier orb behind pack */}
+      <div style={{position:"absolute",width:520,height:520,borderRadius:"50%",
+        background:`radial-gradient(circle, ${t.accent}28 0%, ${t.accent}08 40%, transparent 70%)`,
+        animation:"ppulse 2.4s ease-in-out infinite",pointerEvents:"none"}}/>
+
+      {/* Title */}
+      <div style={{textAlign:"center",marginBottom:36,position:"relative",zIndex:2}}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:6,color:t.accent,opacity:0.85,marginBottom:6}}>
+          YOUR CTWC CARD HAS BEEN MINTED
+        </div>
+        <div style={{fontSize:32,fontWeight:900,color:"#fff",letterSpacing:2,
+          textShadow:`0 0 24px ${t.accent}66`}}>
+          Tap to open your pack
+        </div>
+      </div>
+
+      {/* The pack itself — same look as CardReveal pack phase */}
+      <div style={{
+        width:220,height:308,borderRadius:18,position:"relative",zIndex:2,
+        background:`linear-gradient(160deg, ${t.bg} 0%, #0d0f14 60%, ${t.bg}99 100%)`,
+        border:`2px solid ${t.border}`,
+        boxShadow:`0 0 50px ${t.accent}66, 0 0 100px ${t.accent}33, inset 0 1px 0 rgba(255,255,255,0.1)`,
+        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+        animation:"packFloat 3s ease-in-out infinite",
+        overflow:"hidden",
+      }}>
+        {/* Shimmer */}
+        <div style={{position:"absolute",top:0,left:"-60px",width:"50px",height:"100%",
+          background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)",
+          animation:"shimmerSweep 2.4s 0.4s linear infinite",pointerEvents:"none"}}/>
+        <div style={{fontSize:54,marginBottom:10,filter:`drop-shadow(0 0 14px ${t.accent})`}}>
+          {badge.icon}
+        </div>
+        <div style={{fontSize:14,fontWeight:900,letterSpacing:5,color:t.accent,textTransform:"uppercase"}}>
+          CTWC
+        </div>
+        <div style={{fontSize:10,fontWeight:700,letterSpacing:4,color:"rgba(255,255,255,0.35)",marginTop:5}}>
+          2026 PACK
+        </div>
+        <div style={{marginTop:18,padding:"5px 16px",borderRadius:22,
+          background:`${t.accent}22`,border:`1px solid ${t.border}55`,
+          fontSize:11,fontWeight:700,color:t.accent,letterSpacing:2.5}}>
+          {t.name.toUpperCase()}
+        </div>
+      </div>
+
+      {/* CTA */}
+      <button onClick={(e) => { e.stopPropagation(); onOpen(); }} style={{
+        marginTop:38,padding:"14px 38px",fontSize:14,fontWeight:800,letterSpacing:3,
+        borderRadius:10,background:`linear-gradient(135deg, ${t.accent}, ${t.border})`,
+        border:"none",color:"#0a0a0a",cursor:"pointer",
+        boxShadow:`0 0 32px ${t.accent}66`,
+        position:"relative",zIndex:2,
+        textTransform:"uppercase",
+      }}>
+        🔥 OPEN PACK
+      </button>
+
+      <div style={{marginTop:14,fontSize:10,color:"rgba(255,255,255,0.35)",
+        letterSpacing:2,position:"relative",zIndex:2}}>
+        Tap anywhere to continue
+      </div>
+    </div>
+  );
+}
+
 function CardReveal({ card, onDone }) {
   const [phase, setPhase] = useState("pack"); // pack → rip → reveal → done
   const t = card.tier;
@@ -2691,9 +2778,11 @@ export default function CTWCApp() {
         setMyCardId(card.id);
         await loadData();
         if (justClaimed) {
-          warmAudio();
-          SFX.crowd("build"); // fire sound NOW — same tick as page transition
-          setPage("reveal");
+          // Browser autoplay policy: a fresh page load (post-OAuth redirect)
+          // has NO user gesture yet, so AudioContext is suspended. We can't
+          // play audio until the user taps something. Show the "Tap to open"
+          // intermediate screen — that tap unlocks audio + fires the build sound.
+          setPage("revealReady");
         } else if (data.team_id) {
           setViewTeamId(data.team_id);
           setPage("teamPage");
@@ -2739,9 +2828,9 @@ export default function CTWCApp() {
       const card = transformCard(data.card);
       setPending(card);
       setMyCardId(card.id);
-      warmAudio();
-      SFX.crowd("build"); // fire sound NOW — same tick as page transition
-      setPage("reveal");
+      // Same tap-to-open gate as OAuth path — guarantees user gesture
+      // before AudioContext resumes, fixing browser autoplay block.
+      setPage("revealReady");
     } catch (e) {
       setMintError("Network error — try again");
     }
@@ -2869,6 +2958,15 @@ export default function CTWCApp() {
 
       {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
+      {page==="revealReady" && pending && (
+        <RevealReadyGate card={pending} onOpen={() => {
+          // This click IS the user gesture — AudioContext can now play.
+          getCtx();              // resumes if suspended
+          warmAudio();           // pre-fill noise buffer
+          SFX.crowd("build");    // fire sound in same task as page transition
+          setPage("reveal");
+        }}/>
+      )}
       {page==="reveal"      && pending && (
         <div style={{minHeight:"100vh",background:"#070B14",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
           <CardReveal card={pending} onDone={afterReveal}/>
