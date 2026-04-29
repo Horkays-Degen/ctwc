@@ -529,184 +529,171 @@ function ShieldCard({ card, size="large", onClick = undefined }: { card: any; si
   const [hovStat, setHovStat] = useState<string|null>(null);
   const t    = card.tier;
   const isLg = size === "large";
-  const W    = isLg ? 270 : 170;
-  const H    = isLg ? 395 : 248;
+  const W    = isLg ? 260 : 164;
+  const H    = isLg ? 380 : 240;
   const s    = isLg ? 1 : 0.63;
   const fx   = TIER_FX[t.name] ?? TIER_FX["CT Player"];
-  const VW = 270, VH = 180;
+  const VW = 260, VH = 240;
 
   const particles = useMemo(
     () => seedParticles(card.handle || "ct", fx.particles),
     [card.handle, fx.particles]
   );
 
+  // Bottom panel height — where name + stats live
+  const PANEL_H = Math.round(148 * s);
+
   return (
-    // Wrapper carries the drop-shadow (respects clip-path shape)
     <div style={{
-      width:W, height:H, flexShrink:0, position:"relative",
+      width: W, height: H, flexShrink: 0, position: "relative",
       cursor: onClick ? "pointer" : "default",
-      userSelect:"none",
-      transition:"transform 0.22s, filter 0.22s",
-      filter:`drop-shadow(0 0 ${Math.round(22*s)}px ${t.glow}77) drop-shadow(0 ${Math.round(10*s)}px ${Math.round(30*s)}px rgba(0,0,0,0.9))`,
+      userSelect: "none",
+      borderRadius: Math.round(14 * s),
+      transition: "transform 0.22s, box-shadow 0.22s",
+      boxShadow: `0 0 ${Math.round(28*s)}px ${t.glow}55, 0 ${Math.round(12*s)}px ${Math.round(36*s)}px rgba(0,0,0,0.85)`,
     }}
-    onMouseEnter={e=>{ if(onClick)(e.currentTarget as HTMLElement).style.transform="scale(1.05) translateY(-3px)"; }}
-    onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.transform="scale(1) translateY(0)"; }}
+    onMouseEnter={e => { if (onClick) { (e.currentTarget as HTMLElement).style.transform = "scale(1.05) translateY(-4px)"; } }}
+    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1) translateY(0)"; }}
     onClick={onClick}>
 
-      {/* ── Shield body (clipped) ── */}
+      {/* ── Card body ── */}
       <div style={{
-        position:"absolute", inset:0,
-        clipPath: SHIELD_CLIP,
-        overflow:"hidden",
-        fontFamily:"'Segoe UI',system-ui,sans-serif",
+        position: "absolute", inset: 0,
+        borderRadius: Math.round(14 * s),
+        overflow: "hidden",
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
       }}>
 
-        {/* L0 · Background gradient */}
+        {/* L0 · Tier background (shows when no avatar) */}
         <div style={{position:"absolute",inset:0,zIndex:0,
-          background:`linear-gradient(170deg,${t.bg} 0%,${t.bgDark} 52%,#020408 100%)`}}/>
+          background:`linear-gradient(175deg,${t.bg} 0%,${t.bgDark} 55%,#010205 100%)`}}/>
 
-        {/* L1 · Top radial glow (behind avatar) */}
-        <div style={{position:"absolute",top:"-5%",left:"50%",transform:"translateX(-50%)",
-          width:"110%",height:"60%",zIndex:1,pointerEvents:"none",
-          background:`radial-gradient(ellipse at 50% 10%,${t.accent}2e 0%,${t.accent}10 35%,transparent 70%)`}}/>
+        {/* L1 · Avatar — fills full card, zoomed to face */}
+        {card.avatarUrl ? (
+          <img src={card.avatarUrl} alt={card.displayName} style={{
+            position:"absolute",inset:0,width:"100%",height:"100%",
+            objectFit:"cover",objectPosition:"center 8%",
+            display:"block",zIndex:1,
+            filter:`brightness(1.08) contrast(1.08) saturate(1.15)`,
+          }}/>
+        ) : (
+          <div style={{position:"absolute",inset:0,zIndex:1,
+            background:`linear-gradient(150deg,${aColor(card.displayName)} 0%,${t.bgDark} 100%)`,
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:Math.round(72*s),fontWeight:900,color:"rgba(255,255,255,0.85)"}}>
+              {inits(card.displayName)}
+            </span>
+          </div>
+        )}
 
-        {/* L2 · Constellation SVG network */}
-        <svg style={{position:"absolute",inset:0,width:"100%",height:`${Math.round(H*0.65)}px`,
-          zIndex:2,opacity:fx.particles>0?0.55:0.3}} viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice">
+        {/* L2 · Constellation overlay (subtle, on top of avatar) */}
+        <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",
+          zIndex:2,opacity:fx.particles>0?0.18:0.10,mixBlendMode:"screen",pointerEvents:"none"}}
+          viewBox={`0 0 ${VW} ${VH}`} preserveAspectRatio="xMidYMid slice">
           {CONST_LINES.map((seg,i)=>(
             <polyline key={i} points={seg.map(([x,y])=>`${x*VW},${y*VH}`).join(" ")}
-              fill="none" stroke={t.border} strokeWidth="0.65" opacity="0.7"/>
+              fill="none" stroke={t.accent} strokeWidth="0.8" opacity="0.9"/>
           ))}
           {CONST_DOTS.map(([x,y],i)=>(
-            <circle key={i} cx={x*VW} cy={y*VH} r="1.3" fill={t.accent} opacity="0.72"/>
+            <circle key={i} cx={x*VW} cy={y*VH} r="1.5" fill={t.accent} opacity="0.85"/>
           ))}
           {BRIGHT_STARS.map(([x,y],i)=>(
-            <circle key={`b${i}`} cx={x*VW} cy={y*VH} r="2.6" fill={t.accent} opacity="0.5"/>
+            <circle key={`b${i}`} cx={x*VW} cy={y*VH} r="2.8" fill={t.accent} opacity="0.6"/>
           ))}
-          {/* CT Elite / Mythic extra network density */}
           {fx.particles > 10 && [
             [[0.22,0.35],[0.42,0.45],[0.60,0.38]],
             [[0.70,0.30],[0.85,0.42],[0.78,0.55]],
             [[0.12,0.55],[0.30,0.62]],
           ].map((seg,i)=>(
             <polyline key={`x${i}`} points={seg.map(([x,y])=>`${x*VW},${y*VH}`).join(" ")}
-              fill="none" stroke={t.accent} strokeWidth="0.4" opacity="0.4"/>
+              fill="none" stroke={t.accent} strokeWidth="0.5" opacity="0.5"/>
           ))}
         </svg>
 
         {/* L3 · Particles (CT Star+) */}
         {particles.map((p,i)=>(
           <div key={i} style={{
-            position:"absolute",left:`${p.x}%`,top:`${p.y}%`,
+            position:"absolute",left:`${p.x}%`,top:`${p.y * 0.6}%`,
             width:Math.round(p.size*s),height:Math.round(p.size*s),borderRadius:"50%",
-            background:t.accent,opacity:p.op,zIndex:3,
+            background:t.accent,opacity:p.op * 0.6,zIndex:3,
             animation:`ppulse ${p.dur}s ${p.del}s ease-in-out infinite`,
           }}/>
         ))}
 
-        {/* L4 · Top title band — "CTWC / TIER" */}
-        <div style={{position:"absolute",top:0,left:0,right:0,zIndex:8,textAlign:"center",
-          padding:`${Math.round(11*s)}px 0 ${Math.round(5*s)}px`,
-          background:`linear-gradient(180deg,${t.bgDark}bb 0%,transparent 100%)`}}>
-          <div style={{fontSize:Math.round(7.5*s),fontWeight:700,color:t.accent,
-            letterSpacing:Math.round(4*s),opacity:0.75}}>CTWC</div>
-          <div style={{fontSize:Math.round(9*s),fontWeight:900,color:"#fff",
-            letterSpacing:Math.round(6*s),textTransform:"uppercase",
-            textShadow:`0 0 ${Math.round(10*s)}px ${t.glow}`}}>
-            {t.name.replace("CT ","").toUpperCase()}
-          </div>
-        </div>
+        {/* L4 · Top dark vignette — keeps OVR/pos text readable over avatar */}
+        <div style={{position:"absolute",top:0,left:0,right:0,
+          height:`${Math.round(H * 0.42)}px`,zIndex:5,pointerEvents:"none",
+          background:`linear-gradient(180deg,rgba(0,0,0,0.72) 0%,rgba(0,0,0,0.38) 55%,transparent 100%)`}}/>
 
-        {/* L5 · OVR + position + handle (top-left) */}
-        <div style={{position:"absolute",top:Math.round(36*s),left:Math.round(12*s),zIndex:10}}>
-          <div style={{fontSize:Math.round(50*s),fontWeight:900,lineHeight:0.86,color:"#fff",letterSpacing:-2,
-            textShadow:`0 2px ${Math.round(10*s)}px rgba(0,0,0,0.95),0 0 ${Math.round(22*s)}px ${t.glow}88`}}>
+        {/* L5 · Bottom dark fade — strong backdrop for name + stats */}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,
+          height:`${PANEL_H + Math.round(40*s)}px`,zIndex:5,pointerEvents:"none",
+          background:`linear-gradient(0deg,rgba(0,0,0,0.97) 0%,rgba(0,0,0,0.93) 42%,rgba(0,0,0,0.60) 68%,transparent 100%)`}}/>
+
+        {/* L6 · Tier colour wash — tints the top of the card */}
+        <div style={{position:"absolute",top:0,left:0,right:0,height:"38%",
+          zIndex:4,pointerEvents:"none",
+          background:`linear-gradient(180deg,${t.bgDark}88 0%,transparent 100%)`}}/>
+
+        {/* L7 · OVR + position (top-left, EA FC style) */}
+        <div style={{position:"absolute",top:Math.round(12*s),left:Math.round(12*s),zIndex:10,
+          textAlign:"center",lineHeight:1}}>
+          <div style={{fontSize:Math.round(46*s),fontWeight:900,color:"#fff",letterSpacing:-1,
+            textShadow:`0 2px ${Math.round(8*s)}px rgba(0,0,0,0.9),0 0 ${Math.round(18*s)}px ${t.glow}88`}}>
             {card.ovr}
           </div>
           <div style={{fontSize:Math.round(11*s),fontWeight:900,color:t.accent,letterSpacing:1.5,
-            marginTop:Math.round(3*s),textShadow:`0 0 ${Math.round(8*s)}px ${t.glow}`}}>
+            marginTop:Math.round(2*s),textShadow:`0 0 ${Math.round(6*s)}px ${t.glow}`}}>
             {card.position?.code ?? "MID"}
           </div>
-          {/* X handle */}
-          <div style={{display:"flex",alignItems:"center",gap:Math.round(3*s),marginTop:Math.round(7*s)}}>
-            <span style={{fontSize:Math.round(9*s),color:"rgba(255,255,255,0.5)",fontWeight:700}}>𝕏</span>
-            <span style={{fontSize:Math.round(7.5*s),color:"rgba(255,255,255,0.45)",fontFamily:"monospace",
-              maxWidth:Math.round(52*s),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-              @{card.handle}
-            </span>
-            {card.rawProfile?.verified && (
-              <span style={{fontSize:Math.round(8*s),color:"#1D9BF0",flexShrink:0}}>✓</span>
-            )}
-          </div>
-        </div>
-
-        {/* L6 · Glow orb behind avatar */}
-        <div style={{position:"absolute",
-          top:Math.round(18*s),left:"55%",transform:"translateX(-50%)",
-          width:Math.round(190*s),height:Math.round(190*s),borderRadius:"50%",zIndex:4,
-          pointerEvents:"none",
-          background:`radial-gradient(circle,${t.accent}30 0%,${t.accent}12 40%,transparent 70%)`,
-          filter:`blur(${Math.round(12*s)}px)`}}/>
-
-        {/* L7 · Avatar — portrait crop, fades into bottom panel */}
-        <div style={{position:"absolute",
-          top:Math.round(16*s),left:"54%",transform:"translateX(-50%)",
-          width:Math.round(148*s),height:Math.round(185*s),
-          zIndex:6,overflow:"hidden",borderRadius:Math.round(6*s)}}>
-          {card.avatarUrl ? (
-            <img src={card.avatarUrl} alt={card.displayName} style={{
-              width:"100%",height:"100%",
-              objectFit:"cover",objectPosition:"top center",
-              display:"block",
-              filter:`brightness(1.06) contrast(1.10) saturate(1.12)`,
-              WebkitMaskImage:`linear-gradient(180deg,#000 45%,rgba(0,0,0,0.7) 68%,transparent 92%)`,
-              maskImage:`linear-gradient(180deg,#000 45%,rgba(0,0,0,0.7) 68%,transparent 92%)`,
-            }}/>
-          ) : (
-            <div style={{width:"100%",height:"100%",
-              background:`linear-gradient(150deg,${aColor(card.displayName)} 0%,${t.bgDark} 100%)`,
-              display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:"15%",
-              WebkitMaskImage:`linear-gradient(180deg,#000 45%,transparent 92%)`,
-              maskImage:`linear-gradient(180deg,#000 45%,transparent 92%)`}}>
-              <span style={{fontSize:Math.round(52*s),fontWeight:900,color:"rgba(255,255,255,0.88)"}}>
-                {inits(card.displayName)}
-              </span>
-            </div>
+          {/* Verified tick */}
+          {card.rawProfile?.verified && (
+            <div style={{marginTop:Math.round(4*s),fontSize:Math.round(9*s),color:"#1D9BF0"}}>✓</div>
           )}
         </div>
 
-        {/* L8 · Hex tier badge (left, mid-card) */}
-        <div style={{position:"absolute",left:Math.round(10*s),top:Math.round(148*s),zIndex:10}}>
-          <svg width={Math.round(36*s)} height={Math.round(40*s)} viewBox="0 0 36 40">
-            <polygon points="18,1 35,10 35,30 18,39 1,30 1,10"
-              fill={t.bgDark} stroke={t.border} strokeWidth="1.5"
-              style={{filter:`drop-shadow(0 0 5px ${t.glow}77)`}}/>
-            <text x="18" y="26" textAnchor="middle" fontSize="17" fontFamily="system-ui">{TIER_ICON[t.name]}</text>
-          </svg>
+        {/* L8 · Tier badge (top-right) */}
+        <div style={{position:"absolute",top:Math.round(10*s),right:Math.round(10*s),zIndex:10,
+          display:"flex",flexDirection:"column",alignItems:"center",gap:Math.round(2*s)}}>
+          <div style={{
+            fontSize:Math.round(9*s),fontWeight:800,color:t.accent,letterSpacing:1.5,
+            padding:`${Math.round(3*s)}px ${Math.round(6*s)}px`,
+            background:`${t.bgDark}cc`,borderRadius:Math.round(4*s),
+            border:`1px solid ${t.border}66`,
+            textShadow:`0 0 ${Math.round(8*s)}px ${t.glow}`,
+          }}>CTWC</div>
+          <div style={{fontSize:Math.round(16*s)}}>{TIER_ICON[t.name]}</div>
         </div>
 
-        {/* L9 · Bottom dark panel — name + stats */}
-        <div style={{position:"absolute",bottom:0,left:0,right:0,zIndex:9,
-          padding:`${Math.round(16*s)}px ${Math.round(10*s)}px ${Math.round(14*s)}px`,
-          background:`linear-gradient(180deg,transparent 0%,${t.bgDark}e0 16%,${t.bgDark}f9 40%,#010205 100%)`}}>
+        {/* L9 · Bottom panel — name + divider + stats */}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,zIndex:10,
+          padding:`${Math.round(10*s)}px ${Math.round(10*s)}px ${Math.round(12*s)}px`}}>
 
-          {/* Name */}
-          <div style={{textAlign:"center",marginBottom:Math.round(5*s)}}>
-            <div style={{fontSize:Math.round(17*s),fontWeight:900,color:"#fff",
+          {/* Player name */}
+          <div style={{textAlign:"center",marginBottom:Math.round(6*s)}}>
+            <div style={{fontSize:Math.round(15*s),fontWeight:900,color:"#fff",
               textTransform:"uppercase",letterSpacing:Math.round(1.5*s),
-              textShadow:`0 0 ${Math.round(18*s)}px ${t.glow}99`,
+              textShadow:`0 0 ${Math.round(14*s)}px ${t.glow}88`,
               overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
               {card.displayName}
             </div>
+            {/* X handle */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",
+              gap:Math.round(3*s),marginTop:Math.round(2*s)}}>
+              <span style={{fontSize:Math.round(8*s),color:"rgba(255,255,255,0.4)",fontWeight:700}}>𝕏</span>
+              <span style={{fontSize:Math.round(8*s),color:"rgba(255,255,255,0.38)",fontFamily:"monospace"}}>
+                @{card.handle}
+              </span>
+            </div>
           </div>
 
-          {/* Gradient divider */}
-          <div style={{height:1,margin:`0 ${Math.round(6*s)}px ${Math.round(6*s)}px`,
-            background:`linear-gradient(90deg,transparent,${t.border}88,transparent)`}}/>
+          {/* Divider */}
+          <div style={{height:1,margin:`0 ${Math.round(4*s)}px ${Math.round(8*s)}px`,
+            background:`linear-gradient(90deg,transparent,${t.border}99,transparent)`}}/>
 
           {/* CT Stats row */}
           <div style={{display:"flex",justifyContent:"space-around"}}>
-            {CT_STATS.map(sd=>{
+            {CT_STATS.map(sd => {
               const val = card.stats?.[sd.stat] ?? 60;
               return (
                 <div key={sd.k} style={{textAlign:"center",position:"relative"}}
@@ -715,7 +702,7 @@ function ShieldCard({ card, size="large", onClick = undefined }: { card: any; si
                   {hovStat===sd.k&&(
                     <div style={{position:"absolute",bottom:"calc(100% + 8px)",left:"50%",
                       transform:"translateX(-50%)",
-                      background:"rgba(0,0,0,0.96)",border:`1px solid ${t.border}99`,
+                      background:"rgba(0,0,0,0.97)",border:`1px solid ${t.border}99`,
                       color:"#fff",fontSize:9,padding:"5px 10px",borderRadius:7,
                       whiteSpace:"nowrap",zIndex:200,
                       boxShadow:`0 4px 20px rgba(0,0,0,0.85),0 0 14px ${t.glow}33`,
@@ -723,48 +710,50 @@ function ShieldCard({ card, size="large", onClick = undefined }: { card: any; si
                       <span style={{color:t.accent,fontWeight:800}}>{sd.k}</span>{" · "}{sd.tip}
                     </div>
                   )}
-                  <div style={{fontSize:Math.round(7*s),color:t.accent,fontWeight:700,
-                    letterSpacing:0.4,opacity:0.9,marginBottom:Math.round(1*s)}}>{sd.k}</div>
-                  <div style={{fontSize:Math.round(19*s),fontWeight:900,color:"#fff",lineHeight:1,
-                    textShadow:`0 0 ${Math.round(8*s)}px ${t.glow}66`}}>{val}</div>
+                  {/* Stat number first (EA FC style — number on top) */}
+                  <div style={{fontSize:Math.round(20*s),fontWeight:900,color:"#fff",lineHeight:1,
+                    textShadow:`0 0 ${Math.round(10*s)}px ${t.glow}77`}}>{val}</div>
+                  <div style={{fontSize:Math.round(6.5*s),color:t.accent,fontWeight:700,
+                    letterSpacing:0.3,opacity:0.85,marginTop:Math.round(1*s)}}>{sd.k}</div>
                 </div>
               );
             })}
           </div>
 
-          {/* Footer — CTWC branding + tier stars */}
+          {/* Footer */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
             marginTop:Math.round(7*s),paddingTop:Math.round(5*s),
-            borderTop:`1px solid ${t.border}22`}}>
-            <span style={{fontSize:Math.round(7*s),fontWeight:700,color:t.accent,
-              opacity:0.45,letterSpacing:1.5}}>CTWC 2026</span>
-            <span style={{fontSize:Math.round(8*s),color:t.border,opacity:0.5,letterSpacing:1}}>
+            borderTop:`1px solid ${t.border}1a`}}>
+            <span style={{fontSize:Math.round(6.5*s),fontWeight:700,color:t.accent,
+              opacity:0.4,letterSpacing:1.5}}>CTWC 2026</span>
+            <span style={{fontSize:Math.round(7*s),color:t.border,opacity:0.45,letterSpacing:1}}>
               {"✦".repeat(
                 t.name==="Mythic"?5:t.name==="CT Legend"?4:t.name==="CT Elite"?3:t.name==="CT Star"?2:1
               )}
             </span>
-            <span style={{fontSize:Math.round(7*s),fontWeight:700,color:t.accent,
-              opacity:0.45,letterSpacing:1}}>S1</span>
+            <span style={{fontSize:Math.round(6.5*s),fontWeight:700,color:t.accent,
+              opacity:0.4,letterSpacing:1}}>S1</span>
           </div>
         </div>
 
-        {/* L10 · Inner border glow (inside clip-path) */}
-        <div style={{position:"absolute",inset:0,zIndex:15,pointerEvents:"none",
-          boxShadow:`inset 0 0 0 ${Math.max(1,Math.round(2*s))}px ${t.border}cc,
-                     inset 0 0 ${Math.round(24*s)}px ${t.glow}18`}}/>
+        {/* L10 · Inner border */}
+        <div style={{position:"absolute",inset:0,zIndex:15,pointerEvents:"none",borderRadius:Math.round(14*s),
+          boxShadow:`inset 0 0 0 ${Math.max(1,Math.round(2*s))}px ${t.border}99,
+                     inset 0 0 ${Math.round(20*s)}px ${t.glow}14`}}/>
 
         {/* L11 · Shimmer sweep (CT Legend + Mythic) */}
         {(t.name==="CT Legend"||t.name==="Mythic")&&(
-          <div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:16,overflow:"hidden"}}>
+          <div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:16,
+            overflow:"hidden",borderRadius:Math.round(14*s)}}>
             <div style={{position:"absolute",top:0,left:"-100%",width:"55%",height:"100%",
-              background:"linear-gradient(105deg,transparent 20%,rgba(255,255,255,0.065) 50%,transparent 80%)",
+              background:"linear-gradient(105deg,transparent 20%,rgba(255,255,255,0.07) 50%,transparent 80%)",
               animation:"shimmer 3.5s infinite linear"}}/>
           </div>
         )}
 
         {/* L12 · Grain overlay (CT Legend) */}
         {fx.grain&&(
-          <div style={{position:"absolute",inset:0,zIndex:17,pointerEvents:"none",opacity:0.06,
+          <div style={{position:"absolute",inset:0,zIndex:17,pointerEvents:"none",opacity:0.05,
             backgroundImage:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
             backgroundSize:"180px 180px"}}/>
         )}
