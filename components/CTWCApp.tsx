@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase";
 
 // ─── DATA TRANSFORMS (Supabase rows → UI shape) ───────────────
@@ -477,12 +478,30 @@ const inits = n => n.split(" ").map(w=>w[0]).join("").substring(0,2).toUpperCase
 // ─── SHIELD CARD ─────────────────────────────────────────────
 // Universal CT stat labels — same for every position.
 // These feel like CT personality traits, not generic football stats.
+// Format helper for big numbers in source breakdowns
+const fmtNum = (n: number | undefined): string => {
+  if (n === undefined || n === null) return "—";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/,"") + "M";
+  if (n >= 1_000)     return (n / 1_000    ).toFixed(1).replace(/\.0$/,"") + "k";
+  return n.toLocaleString();
+};
+
 const CT_STATS = [
-  { k:"ALPHA",  stat:"ENG", tip:"Early alpha calls · engagement rate · first-mover energy" },
-  { k:"CLUTCH", stat:"CLT", tip:"Listed authority · trusted voice · clutch reputation" },
-  { k:"GRIND",  stat:"VOL", tip:"Tweet volume · consistency · non-stop output" },
-  { k:"REACH",  stat:"INF", tip:"Follower count · total influence · network size" },
-  { k:"VIRAL",  stat:"VRL", tip:"Retweet power · content spread · viral coefficient" },
+  { k:"ALPHA",  stat:"ENG", label:"Alpha Caller",
+    tip:"Early alpha calls · engagement rate · first-mover energy",
+    src:(p:any)=>({ label:"Engagement Rate", value: p?.followers ? `${((p.followers||0)/100).toFixed(1)}%` : "—" }) },
+  { k:"CLUTCH", stat:"CLT", label:"Clutch Authority",
+    tip:"Listed authority · trusted voice · clutch reputation",
+    src:(p:any)=>({ label:"Listed By", value: `${fmtNum(p?.listedCount)} accounts` }) },
+  { k:"GRIND",  stat:"VOL", label:"Daily Grinder",
+    tip:"Tweet volume · consistency · non-stop output",
+    src:(p:any)=>({ label:"Total Tweets", value: fmtNum(p?.tweetCount) }) },
+  { k:"REACH",  stat:"INF", label:"Network Reach",
+    tip:"Follower count · total influence · network size",
+    src:(p:any)=>({ label:"Followers", value: fmtNum(p?.followers) }) },
+  { k:"VIRAL",  stat:"VRL", label:"Viral Power",
+    tip:"Retweet power · content spread · viral coefficient",
+    src:(p:any)=>({ label:"Avg Retweets", value: "live" }) },
 ];
 
 // Per-tier FX config — defines what visual layer each tier gets
@@ -542,7 +561,10 @@ const TIER_ICON: Record<string,string> = {
 };
 
 function ShieldCard({ card, size="large", onClick = undefined }: { card: any; size?: string; onClick?: any }) {
-  const [hovStat, setHovStat] = useState<string|null>(null);
+  // Hover state: { sd: stat-def, val: number, x: mouseX, y: mouseY } | null
+  const [hovStat, setHovStat] = useState<{ sd: any; val: number; x: number; y: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const t    = card.tier;
   const isLg = size === "large";
   const W    = isLg ? 260 : 164;
@@ -711,26 +733,19 @@ function ShieldCard({ card, size="large", onClick = undefined }: { card: any; si
           <div style={{display:"flex",justifyContent:"space-around"}}>
             {CT_STATS.map(sd => {
               const val = card.stats?.[sd.stat] ?? 60;
+              const isHov = hovStat?.sd.k === sd.k;
               return (
-                <div key={sd.k} style={{textAlign:"center",position:"relative"}}
-                  onMouseEnter={()=>isLg&&setHovStat(sd.k)}
+                <div key={sd.k} style={{textAlign:"center",position:"relative",cursor:isLg?"help":"default",
+                  transform:isHov?"translateY(-2px)":"none",transition:"transform 0.18s"}}
+                  onMouseEnter={(e)=>{ if(isLg) setHovStat({ sd, val, x: e.clientX, y: e.clientY }); }}
                   onMouseLeave={()=>setHovStat(null)}>
-                  {hovStat===sd.k&&(
-                    <div style={{position:"absolute",bottom:"calc(100% + 8px)",left:"50%",
-                      transform:"translateX(-50%)",
-                      background:"rgba(0,0,0,0.97)",border:`1px solid ${t.border}99`,
-                      color:"#fff",fontSize:9,padding:"5px 10px",borderRadius:7,
-                      whiteSpace:"nowrap",zIndex:200,
-                      boxShadow:`0 4px 20px rgba(0,0,0,0.85),0 0 14px ${t.glow}33`,
-                      pointerEvents:"none"}}>
-                      <span style={{color:t.accent,fontWeight:800}}>{sd.k}</span>{" · "}{sd.tip}
-                    </div>
-                  )}
                   {/* Stat number first (EA FC style — number on top) */}
-                  <div style={{fontSize:Math.round(20*s),fontWeight:900,color:"#fff",lineHeight:1,
-                    textShadow:`0 0 ${Math.round(10*s)}px ${t.glow}77`}}>{val}</div>
+                  <div style={{fontSize:Math.round(20*s),fontWeight:900,
+                    color:isHov?t.accent:"#fff",lineHeight:1,
+                    textShadow:isHov?`0 0 ${Math.round(16*s)}px ${t.accent}`:`0 0 ${Math.round(10*s)}px ${t.glow}77`,
+                    transition:"color 0.18s, text-shadow 0.18s"}}>{val}</div>
                   <div style={{fontSize:Math.round(6.5*s),color:t.accent,fontWeight:700,
-                    letterSpacing:0.3,opacity:0.85,marginTop:Math.round(1*s)}}>{sd.k}</div>
+                    letterSpacing:0.3,opacity:isHov?1:0.85,marginTop:Math.round(1*s)}}>{sd.k}</div>
                 </div>
               );
             })}
@@ -773,6 +788,169 @@ function ShieldCard({ card, size="large", onClick = undefined }: { card: any; si
             backgroundImage:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
             backgroundSize:"180px 180px"}}/>
         )}
+      </div>
+
+      {/* ── Holographic Stat Inspector — rendered via portal so it escapes
+            the card's overflow:hidden and any 3D-transformed ancestors ── */}
+      {mounted && hovStat && typeof document !== "undefined" && createPortal(
+        <HoloStatPanel hov={hovStat} tier={t} card={card}/>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+// ─── HOLO STAT PANEL ──────────────────────────────────────────
+// Floating, holographic breakdown panel that appears next to the cursor
+// when a stat is hovered. Free of any card overflow / transform constraint.
+function HoloStatPanel({ hov, tier, card }: { hov: any; tier: any; card: any }) {
+  const { sd, val, x, y } = hov;
+  const t = tier;
+  const PANEL_W = 320;
+  const PANEL_H = 200;
+  const MARGIN  = 18;
+
+  // Position: prefer above + slightly right of cursor; flip if it would clip
+  const vw = typeof window !== "undefined" ? window.innerWidth  : 1200;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  let left = x + MARGIN;
+  let top  = y - PANEL_H - MARGIN;
+  if (left + PANEL_W > vw - 12) left = x - PANEL_W - MARGIN;
+  if (top  < 12) top  = y + MARGIN;
+  if (left < 12) left = 12;
+  if (top  + PANEL_H > vh - 12) top = vh - PANEL_H - 12;
+
+  const src = sd.src ? sd.src(card?.rawProfile) : null;
+  // Bar fill % — clamp 0–100
+  const pct = Math.max(0, Math.min(100, val));
+  // Tier-tinted holo gradient
+  const holoBg = `linear-gradient(135deg, rgba(8,12,22,0.96) 0%, ${t.bgDark}f5 38%, ${t.bg}88 64%, rgba(8,12,22,0.96) 100%)`;
+
+  return (
+    <div style={{
+      position: "fixed",
+      top, left,
+      width: PANEL_W,
+      zIndex: 9999,
+      pointerEvents: "none",
+      animation: "holoIn 0.18s cubic-bezier(0.22,1,0.36,1) both",
+      fontFamily: "'Segoe UI',system-ui,sans-serif",
+    }}>
+      {/* Outer glow halo */}
+      <div style={{
+        position:"absolute",inset:-22,borderRadius:18,
+        background:`radial-gradient(ellipse at center, ${t.accent}33 0%, ${t.accent}10 40%, transparent 70%)`,
+        filter:"blur(14px)",
+      }}/>
+
+      <div style={{
+        position:"relative",
+        background: holoBg,
+        backdropFilter:"blur(22px)",
+        WebkitBackdropFilter:"blur(22px)",
+        border:`1.5px solid ${t.border}cc`,
+        borderRadius:14,
+        padding:"16px 18px 18px",
+        boxShadow:`0 0 50px ${t.accent}55, 0 12px 40px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.07)`,
+        overflow:"hidden",
+      }}>
+
+        {/* Holographic shimmer band */}
+        <div style={{
+          position:"absolute",top:0,left:"-30%",width:"40%",height:"100%",
+          background:`linear-gradient(105deg, transparent 30%, ${t.accent}22 50%, transparent 70%)`,
+          animation:"holoSweep 2.2s linear infinite",pointerEvents:"none",
+        }}/>
+
+        {/* Diagonal scan lines (subtle) */}
+        <div style={{
+          position:"absolute",inset:0,opacity:0.08,pointerEvents:"none",
+          background:`repeating-linear-gradient(135deg, ${t.accent} 0 1px, transparent 1px 4px)`,
+        }}/>
+
+        {/* HEADER ROW — stat name + huge value + bar */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:10}}>
+          <div>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:3,color:t.accent,opacity:0.75,marginBottom:1}}>
+              {sd.k}
+            </div>
+            <div style={{fontSize:14,fontWeight:800,color:"#fff",letterSpacing:0.5}}>
+              {sd.label}
+            </div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:38,fontWeight:900,color:"#fff",lineHeight:1,
+              textShadow:`0 0 18px ${t.accent},0 0 6px ${t.glow}`}}>
+              {val}
+            </div>
+            <div style={{fontSize:8,fontWeight:700,letterSpacing:2,color:"rgba(255,255,255,0.4)",marginTop:1}}>
+              / 100
+            </div>
+          </div>
+        </div>
+
+        {/* PROGRESS BAR */}
+        <div style={{
+          height:6,borderRadius:99,
+          background:"rgba(255,255,255,0.06)",
+          overflow:"hidden",position:"relative",
+          marginBottom:13,
+          border:`1px solid ${t.border}33`,
+        }}>
+          <div style={{
+            height:"100%",width:`${pct}%`,borderRadius:99,
+            background:`linear-gradient(90deg, ${t.border} 0%, ${t.accent} 100%)`,
+            boxShadow:`0 0 12px ${t.accent}88, inset 0 0 6px rgba(255,255,255,0.3)`,
+            animation:"holoBarFill 0.7s cubic-bezier(0.22,1,0.36,1) both",
+          }}/>
+        </div>
+
+        {/* SOURCE METRIC */}
+        {src && (
+          <div style={{
+            display:"flex",alignItems:"center",justifyContent:"space-between",
+            padding:"7px 10px",borderRadius:8,marginBottom:10,
+            background:`${t.bgDark}aa`,
+            border:`1px solid ${t.border}33`,
+          }}>
+            <span style={{fontSize:9,fontWeight:700,letterSpacing:1.5,color:"rgba(255,255,255,0.5)",textTransform:"uppercase"}}>
+              {src.label}
+            </span>
+            <span style={{fontSize:12,fontWeight:800,color:t.accent,letterSpacing:0.3}}>
+              {src.value}
+            </span>
+          </div>
+        )}
+
+        {/* DESCRIPTION */}
+        <div style={{
+          fontSize:11,lineHeight:1.5,color:"rgba(255,255,255,0.78)",
+          paddingTop:10,
+          borderTop:`1px solid ${t.border}22`,
+        }}>
+          {sd.tip}
+        </div>
+
+        {/* CORNER BRACKETS — sci-fi inspector frame */}
+        {[
+          {top:6,left:6,bt:0,bb:1,bl:0,br:1},
+          {top:6,right:6,bt:0,bb:1,bl:1,br:0},
+          {bottom:6,left:6,bt:1,bb:0,bl:0,br:1},
+          {bottom:6,right:6,bt:1,bb:0,bl:1,br:0},
+        ].map((p,i)=>{
+          const {bt,bb,bl,br,...pos} = p as any;
+          return (
+            <div key={i} style={{
+              position:"absolute",width:10,height:10,
+              ...pos,
+              borderTop:bt?`1.5px solid ${t.accent}`:"none",
+              borderBottom:bb?`1.5px solid ${t.accent}`:"none",
+              borderLeft:bl?`1.5px solid ${t.accent}`:"none",
+              borderRight:br?`1.5px solid ${t.accent}`:"none",
+              opacity:0.85,
+            }}/>
+          );
+        })}
       </div>
     </div>
   );
@@ -3067,6 +3245,9 @@ export default function CTWCApp() {
         @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
         @keyframes scoreCount { 0%{transform:scale(1.4);opacity:0} 60%{transform:scale(0.95);opacity:1} 100%{transform:scale(1);opacity:1} }
         @keyframes pitchPulse { 0%,100%{transform:scaleX(1)} 50%{transform:scaleX(1.03)} }
+        @keyframes holoIn     { 0%{opacity:0;transform:translateY(8px) scale(0.95)} 100%{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes holoSweep  { 0%{left:-30%} 100%{left:130%} }
+        @keyframes holoBarFill{ 0%{width:0%} }
         *{box-sizing:border-box;margin:0;padding:0}
         body{background:#070B14;overflow-x:hidden}
         input::placeholder{color:rgba(255,255,255,0.22)}
