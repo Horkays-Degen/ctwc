@@ -816,13 +816,13 @@ function CardReveal({ card, onDone }) {
   }))).current;
 
   useEffect(()=>{
-    // Tightened timing so sound fires exactly when the visual transition hits
-    // pack renders → crowd build immediately → rip at 1600ms → reveal at 1820ms (rip anim is 220ms)
-    const t0 = setTimeout(()=> SFX.crowd("build"), 0);
+    // crowd("build") is fired by the caller BEFORE setPage("reveal") so it starts
+    // in the same JS task as the page transition — no paint-delay gap.
+    // This useEffect only handles the rip → reveal → done sequence.
     const t1 = setTimeout(()=>{ setPhase("rip");    SFX.crowd("roar"); },   1600);
     const t2 = setTimeout(()=>{ setPhase("reveal"); SFX.reveal(t.name); }, 1820);
     const t3 = setTimeout(()=>{ setPhase("done");   onDone?.(); },           4200);
-    return()=>{ clearTimeout(t0); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    return()=>{ clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   },[]);
 
   return (
@@ -1427,7 +1427,6 @@ function BrowseTeamsPage({ card, teams, onJoined, onBack }) {
   const join = (team) => {
     if (team.memberIds.length >= 11) return;
     SFX.click();
-    warmAudio(); // pre-fill noise buffer now so reveal has zero lag
     setJoining(team.id);
     setTimeout(() => {
       const updated = addCardToTeam(team, card);
@@ -2693,6 +2692,7 @@ export default function CTWCApp() {
         await loadData();
         if (justClaimed) {
           warmAudio();
+          SFX.crowd("build"); // fire sound NOW — same tick as page transition
           setPage("reveal");
         } else if (data.team_id) {
           setViewTeamId(data.team_id);
@@ -2739,7 +2739,8 @@ export default function CTWCApp() {
       const card = transformCard(data.card);
       setPending(card);
       setMyCardId(card.id);
-      warmAudio(); // pre-fill noise buffer before reveal mounts
+      warmAudio();
+      SFX.crowd("build"); // fire sound NOW — same tick as page transition
       setPage("reveal");
     } catch (e) {
       setMintError("Network error — try again");
