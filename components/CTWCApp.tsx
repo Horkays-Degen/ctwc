@@ -787,6 +787,121 @@ const TIER_BADGES = {
   "Mythic":    { icon:"🔥", label:"CT MYTHIC",  bg:"#3D0A0A", text:"#EF4444" },
 };
 
+// ─── INTERACTIVE CARD (3D tilt + spotlight glow) ──────────────
+// Wraps a ShieldCard for modal/expanded viewing. Adds:
+//   • mouse-reactive 3D tilt (rotateX/rotateY based on cursor offset)
+//   • large radial spotlight glow behind the card that follows the cursor
+//   • specular shine highlight on top of the card that follows the cursor
+// Inspired by FUT card inspectors. Pure CSS transforms — no library.
+function InteractiveCard({ card, size = "large" }: { card: any; size?: string }) {
+  const [tilt, setTilt] = useState({ rx: 0, ry: 0, mx: 50, my: 50, active: false });
+  const t = card?.tier;
+
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const px = x / rect.width;        // 0 → 1 across width
+    const py = y / rect.height;       // 0 → 1 down height
+    // Max tilt ~14° each axis. Y inverts so cursor near top tilts back.
+    const ry = (px - 0.5) * 28;
+    const rx = (0.5 - py) * 20;
+    setTilt({ rx, ry, mx: px * 100, my: py * 100, active: true });
+  };
+
+  const onLeave = () => setTilt({ rx: 0, ry: 0, mx: 50, my: 50, active: false });
+
+  // Card dimensions (must match ShieldCard's W/H)
+  const isLg = size === "large";
+  const W = isLg ? 260 : 164;
+  const H = isLg ? 380 : 240;
+  const accent = t?.accent ?? "#FBBF24";
+  const glow   = t?.glow   ?? "rgba(255,255,255,0.4)";
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+      style={{
+        position: "relative",
+        width: W,
+        height: H,
+        perspective: 1200,
+        cursor: "grab",
+      }}
+    >
+      {/* Spotlight glow behind card — large radial that intensifies on hover */}
+      <div style={{
+        position: "absolute",
+        inset: -120,
+        zIndex: 0,
+        borderRadius: "50%",
+        background: `radial-gradient(circle at ${tilt.mx}% ${tilt.my}%, ${accent}55 0%, ${accent}22 28%, ${accent}08 52%, transparent 72%)`,
+        filter: "blur(28px)",
+        opacity: tilt.active ? 1 : 0.7,
+        transition: "opacity 0.35s",
+        pointerEvents: "none",
+      }}/>
+
+      {/* Secondary ground glow (under card, gives floating feel) */}
+      <div style={{
+        position: "absolute",
+        bottom: -40,
+        left: "10%",
+        right: "10%",
+        height: 60,
+        zIndex: 0,
+        borderRadius: "50%",
+        background: `radial-gradient(ellipse, ${glow} 0%, transparent 70%)`,
+        filter: "blur(18px)",
+        opacity: 0.85,
+        pointerEvents: "none",
+      }}/>
+
+      {/* The 3D-tilted card — transformStyle: preserve-3d so the shine layer sits above */}
+      <div style={{
+        position: "relative",
+        zIndex: 1,
+        width: W,
+        height: H,
+        transformStyle: "preserve-3d",
+        transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg) ${tilt.active ? "scale(1.04)" : "scale(1)"}`,
+        transition: tilt.active ? "transform 0.08s ease-out" : "transform 0.5s cubic-bezier(0.22,1,0.36,1)",
+        willChange: "transform",
+      }}>
+        <ShieldCard card={card} size={size}/>
+
+        {/* Specular shine — bright highlight that follows the cursor */}
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          borderRadius: 14,
+          background: `radial-gradient(circle at ${tilt.mx}% ${tilt.my}%, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.10) 18%, transparent 40%)`,
+          mixBlendMode: "overlay",
+          opacity: tilt.active ? 1 : 0,
+          transition: "opacity 0.25s",
+          pointerEvents: "none",
+          transform: "translateZ(2px)",
+        }}/>
+
+        {/* Subtle holographic gradient sheen — tier accent */}
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          borderRadius: 14,
+          background: `linear-gradient(${135 + tilt.ry * 2}deg, transparent 30%, ${accent}22 50%, transparent 70%)`,
+          mixBlendMode: "screen",
+          opacity: tilt.active ? 0.7 : 0,
+          transition: "opacity 0.3s",
+          pointerEvents: "none",
+          transform: "translateZ(1px)",
+        }}/>
+      </div>
+    </div>
+  );
+}
+
 // ─── REVEAL READY GATE ────────────────────────────────────────
 // Shown after a successful mint, before the actual reveal animation.
 // Required because browser autoplay policy blocks AudioContext from
@@ -1653,8 +1768,8 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       {expandCard&&(
-        <div onClick={()=>setExpandCard(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(14px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-          <ShieldCard card={expandCard} size="large"/>
+        <div onClick={()=>setExpandCard(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",backdropFilter:"blur(16px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+          <InteractiveCard card={expandCard} size="large"/>
         </div>
       )}
       <Nav onHome={onBack} right={
@@ -1745,7 +1860,7 @@ function PlayerPool({ pool, myCard, onBack, onClaim }) {
 
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-      {selected&&<div onClick={()=>setSelected(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(14px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><ShieldCard card={selected} size="large"/></div>}
+      {selected&&<div onClick={()=>setSelected(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",backdropFilter:"blur(16px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><InteractiveCard card={selected} size="large"/></div>}
 
       <Nav onHome={onBack} right={
         hasClaimed
