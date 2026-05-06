@@ -5,11 +5,11 @@ import { toPng } from "html-to-image";
 import { createClient } from "@/lib/supabase";
 
 // ─── DATA TRANSFORMS (Supabase rows → UI shape) ───────────────
-// Single source of truth for the formation. MUST match:
+// Single source of truth for the formation (4-3-3 with 3× CM). MUST match:
 //  - app/api/join-team/route.ts FORMATION_SLOTS
 //  - app/api/tournament/simulate/route.ts SLOT_POSITIONS
 //  - PITCH_SLOTS visual layout (pos field of each slot)
-const SLOT_POSITIONS = ["GK","LB","CB","CB","RB","CDM","CM","CAM","LW","ST","RW"];
+const SLOT_POSITIONS = ["GK","LB","CB","CB","RB","CM","CM","CM","LW","ST","RW"];
 
 function transformCard(row: any) {
   // Resolve tier: DB stores the name string; ShieldCard needs the full TIERS object
@@ -279,20 +279,20 @@ const POSITIONS = [
 // ─── PITCH FORMATION SLOTS (1-4-3-3) ─────────────────────────
 // viewBox 0 0 400 540  (attacking upward)
 const PITCH_SLOTS = [
-  { id:0,  pos:"GK",  x:200, y:482 },
-  { id:1,  pos:"LB",  x:52,  y:382 },
-  { id:2,  pos:"CB",  x:145, y:364 },
-  { id:3,  pos:"CB",  x:255, y:364 },
-  { id:4,  pos:"RB",  x:348, y:382 },
-  { id:5,  pos:"CDM", x:112, y:258 },
-  { id:6,  pos:"CM",  x:200, y:238 },
-  { id:7,  pos:"CAM", x:288, y:258 },
-  { id:8,  pos:"LW",  x:58,  y:116 },
-  { id:9,  pos:"ST",  x:200, y:96  },
-  { id:10, pos:"RW",  x:342, y:116 },
+  { id:0,  pos:"GK", x:200, y:482 },
+  { id:1,  pos:"LB", x:52,  y:382 },
+  { id:2,  pos:"CB", x:145, y:364 },
+  { id:3,  pos:"CB", x:255, y:364 },
+  { id:4,  pos:"RB", x:348, y:382 },
+  { id:5,  pos:"CM", x:112, y:258 },
+  { id:6,  pos:"CM", x:200, y:238 },
+  { id:7,  pos:"CM", x:288, y:258 },
+  { id:8,  pos:"LW", x:58,  y:116 },
+  { id:9,  pos:"ST", x:200, y:96  },
+  { id:10, pos:"RW", x:342, y:116 },
 ];
 
-const CAT_SLOTS = { GK:["GK"], DEF:["LB","CB","RB"], MID:["CDM","CM","CAM"], FWD:["LW","ST","RW"] };
+const CAT_SLOTS = { GK:["GK"], DEF:["LB","CB","RB"], MID:["CM"], FWD:["LW","ST","RW"] };
 
 // ─── TEAM CONFIG ─────────────────────────────────────────────
 const POOL_CAP = 400; // max cards before pool closes
@@ -2834,7 +2834,7 @@ function LeaderboardPage({ pool, teams, myCard, onBack, onClaim }: any) {
 }
 
 // ─── PLAYER POOL / CARD COLLECTION ────────────────────────────
-const POSITION_FILTERS = ["All","GK","CB","LB","RB","CM","CAM","LW","RW","ST"];
+const POSITION_FILTERS = ["All","GK","LB","CB","RB","CM","LW","ST","RW"];
 const SORT_OPTIONS = [
   { k:"ovr-desc",   label:"OVR ↓" },
   { k:"ovr-asc",    label:"OVR ↑" },

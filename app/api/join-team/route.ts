@@ -10,8 +10,8 @@ import { checkRegistrationOpen } from "@/lib/registration-gate";
 //  - Server validates the slot exists in the formation AND is free.
 //  - Falls back to first-available slot if no position is provided
 //    (legacy callers / programmatic seeding).
-// 4-3-3 with CDM/CM/CAM midfield (matches the pitch UI slot layout)
-const FORMATION_SLOTS = ["GK","LB","CB","CB","RB","CDM","CM","CAM","LW","ST","RW"] as const;
+// 4-3-3 with three CMs (matches the pitch UI slot layout)
+const FORMATION_SLOTS = ["GK","LB","CB","CB","RB","CM","CM","CM","LW","ST","RW"] as const;
 type Slot = typeof FORMATION_SLOTS[number];
 
 export async function POST(req: NextRequest) {

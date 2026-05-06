@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
   // Build PlayerSlot array for a team — must match the formation used in
   // /api/join-team and the client transformTeam SLOT_POSITIONS.
-  const SLOT_POSITIONS = ["GK","LB","CB","CB","RB","CDM","CM","CAM","LW","ST","RW"];
+  const SLOT_POSITIONS = ["GK","LB","CB","CB","RB","CM","CM","CM","LW","ST","RW"];
   const buildSlots = (teamId: string) => {
     const teamCards = cardsByTeam[teamId] ?? [];
     // Multi-instance positions (CB×2) consume cards in DB order — same
