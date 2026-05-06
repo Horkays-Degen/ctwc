@@ -2206,34 +2206,76 @@ function CreateTeamPage({ card, onCreated, onBack }) {
 }
 
 // ─── BROWSE TEAMS ──────────────────────────────────────────────
-function BrowseTeamsPage({ card, teams, onJoined, onBack }) {
-  const [joining, setJoining] = useState(null);
+function BrowseTeamsPage({ card, teams, onJoined, onBack }: any) {
+  const [joining, setJoining] = useState<string | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
   const [search, setSearch]   = useState("");
   const [filter, setFilter]   = useState("open"); // "open" | "all"
 
-  const myTeam = card ? teams.find(t=>t.memberIds.includes(card.id)) : null;
+  const myTeam = card ? teams.find((t: any) => t.memberIds.includes(card.id)) : null;
 
   const visible = teams
-    .filter(t => filter==="all" || t.memberIds.length < 11)
-    .filter(t => !search || t.name.toLowerCase().includes(search.toLowerCase()));
+    .filter((t: any) => filter==="all" || t.memberIds.length < 11)
+    .filter((t: any) => !search || t.name.toLowerCase().includes(search.toLowerCase()));
 
-  const join = (team) => {
+  const join = async (team: any) => {
     if (team.memberIds.length >= 11) return;
+    if (joining) return; // already in flight
     SFX.click();
+    setError(null);
     setJoining(team.id);
-    setTimeout(() => {
-      const updated = addCardToTeam(team, card);
+    try {
+      // Parent calls the API and returns null on success or an error string.
+      const errMsg = await onJoined(team);
+      if (errMsg) {
+        setError(errMsg);
+        setJoining(null);
+        return;
+      }
       SFX.success();
-      onJoined(updated);
-    }, 900);
+      // On success the parent navigates away — leave joining set so this
+      // page tears down without the button flashing back to enabled.
+    } catch (e: any) {
+      setError("Unexpected error — try again");
+      setJoining(null);
+    }
   };
 
-  const totalFilled  = teams.reduce((s,t)=>s+t.memberIds.length,0);
+  // Auto-clear errors after 6 seconds
+  useEffect(() => {
+    if (!error) return;
+    const id = setTimeout(() => setError(null), 6000);
+    return () => clearTimeout(id);
+  }, [error]);
+
+  const totalFilled  = teams.reduce((s: number, t: any) => s + t.memberIds.length, 0);
   const totalSlots   = teams.length * 11;
 
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <Nav onHome={onBack}/>
+
+      {/* Error banner — surfaces 403/409/500s from /api/join-team */}
+      {error && (
+        <div style={{
+          margin:"14px 24px 0",
+          padding:"11px 16px",
+          background:"linear-gradient(90deg, rgba(239,68,68,0.18), rgba(239,68,68,0.06))",
+          border:"1px solid rgba(239,68,68,0.5)",
+          borderRadius:9,
+          display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
+          animation:"holoIn 0.25s cubic-bezier(0.22,1,0.36,1) both",
+        }}>
+          <div style={{display:"flex",alignItems:"center",gap:9}}>
+            <span style={{fontSize:18}}>⚠️</span>
+            <span style={{fontSize:13,fontWeight:700,color:"#FCA5A5"}}>{error}</span>
+          </div>
+          <button onClick={()=>setError(null)} style={{
+            background:"transparent",border:"none",color:"rgba(255,255,255,0.5)",
+            fontSize:14,cursor:"pointer",padding:4,
+          }}>✕</button>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{background:"rgba(255,255,255,0.02)",borderBottom:"1px solid rgba(255,255,255,0.05)",padding:"20px 24px 18px"}}>
@@ -4264,17 +4306,26 @@ export default function CTWCApp() {
   };
 
   // ── Join team (calls /api/join-team) ─────────────────────────
-  const handleJoinedTeam = async (team: any) => {
-    if (!pending) return;
-    const res = await fetch("/api/join-team", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ card_id: pending.id, team_id: team.id }),
-    });
-    if (res.ok) {
+  // Returns null on success, or an error message string for the caller to display.
+  const handleJoinedTeam = async (team: any): Promise<string | null> => {
+    if (!pending) return "You don't have a card yet.";
+    try {
+      const res = await fetch("/api/join-team", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ card_id: pending.id, team_id: team.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return data?.error ?? `Join failed (${res.status})`;
+      }
       await loadData();
       setViewTeamId(team.id);
       setPage("teamPage");
+      return null;
+    } catch (err: any) {
+      console.error("join failed:", err);
+      return "Network error — try again";
     }
   };
 
