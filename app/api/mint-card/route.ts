@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-server";
 import { buildCard, XProfile } from "@/lib/card-engine";
 import { removeBackground } from "@/lib/remove-bg";
+import { checkRegistrationOpen } from "@/lib/registration-gate";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,6 +15,11 @@ export async function POST(req: NextRequest) {
 
     const { data: existing } = await supabase.from("cards").select("*").eq("x_handle", handle).single();
     if (existing) return NextResponse.json({ card: existing, cached: true });
+
+    // Registration gate — locks new mints once the deadline passes or
+    // the bracket is seeded.
+    const closedReason = await checkRegistrationOpen();
+    if (closedReason) return NextResponse.json({ error: closedReason }, { status: 403 });
 
     const { count } = await supabase.from("cards").select("*", { count: "exact", head: true });
     if ((count ?? 0) >= 400) return NextResponse.json({ error: "Pool is full (400/400)" }, { status: 403 });

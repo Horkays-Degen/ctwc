@@ -1778,7 +1778,87 @@ function Nav({ onHome, right = null }: { onHome: any; right?: any }) {
 }
 
 // ─── LANDING ──────────────────────────────────────────────────
-function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard, onMyTeam, sessionLoading, totalClaimed }) {
+// ─── REGISTRATION COUNTDOWN ───────────────────────────────────
+// Live ticker banner shown above the hero. Hides when no deadline is set
+// or after the bracket is seeded (registration already closed).
+function RegistrationCountdown({ tournament }: any) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const deadline = tournament?.registration_deadline;
+  if (!deadline) return null;
+  if (tournament?.status && tournament.status !== "registration") return null;
+
+  const target = new Date(deadline).getTime();
+  const ms = target - now;
+  const closed = ms <= 0;
+
+  // Time pieces
+  const total = Math.max(0, ms);
+  const days  = Math.floor(total / 86_400_000);
+  const hrs   = Math.floor((total % 86_400_000) / 3_600_000);
+  const mins  = Math.floor((total % 3_600_000) / 60_000);
+  const secs  = Math.floor((total % 60_000) / 1000);
+
+  // Urgency tiers — colour & pulse change as deadline approaches
+  const urgency = closed
+    ? { color: "#EF4444", glow: "rgba(239,68,68,0.55)", label: "REGISTRATION CLOSED", anim: "" }
+    : days >= 1
+      ? { color: "#22C55E", glow: "rgba(34,197,94,0.4)", label: "REGISTRATION OPEN — Lock-in counts down", anim: "" }
+      : hrs >= 1
+        ? { color: "#FBBF24", glow: "rgba(212,165,55,0.5)", label: "FINAL HOURS — Claim your card", anim: "" }
+        : { color: "#EF4444", glow: "rgba(239,68,68,0.55)", label: "DEADLINE IMMINENT", anim: "ppulse 0.9s ease-in-out infinite" };
+
+  const cell = (n: number, label: string) => (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+      <div style={{
+        fontSize:24,fontWeight:900,color:urgency.color,lineHeight:1,
+        fontVariantNumeric:"tabular-nums",
+        textShadow:`0 0 12px ${urgency.glow}`,minWidth:38,textAlign:"center",
+      }}>{String(n).padStart(2,"0")}</div>
+      <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,color:"rgba(255,255,255,0.45)"}}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div style={{
+      position:"relative",zIndex:10,
+      padding:"10px 28px",
+      borderBottom:`1px solid ${urgency.color}33`,
+      background:`linear-gradient(90deg, transparent, ${urgency.color}10 30%, ${urgency.color}10 70%, transparent)`,
+      backdropFilter:"blur(8px)",
+      animation: urgency.anim,
+      display:"flex",alignItems:"center",justifyContent:"center",gap:24,flexWrap:"wrap",
+    }}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <div style={{
+          width:8,height:8,borderRadius:"50%",background:urgency.color,
+          boxShadow:`0 0 10px ${urgency.glow}`,
+          animation: closed ? "none" : "ppulse 1.4s ease-in-out infinite",
+        }}/>
+        <span style={{fontSize:11,fontWeight:800,color:urgency.color,letterSpacing:2.5}}>
+          {urgency.label}
+        </span>
+      </div>
+      {!closed && (
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          {cell(days, "DAYS")}
+          <span style={{fontSize:18,color:`${urgency.color}66`,fontWeight:900}}>:</span>
+          {cell(hrs, "HRS")}
+          <span style={{fontSize:18,color:`${urgency.color}66`,fontWeight:900}}>:</span>
+          {cell(mins, "MIN")}
+          <span style={{fontSize:18,color:`${urgency.color}66`,fontWeight:900}}>:</span>
+          {cell(secs, "SEC")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard, onMyTeam, sessionLoading, totalClaimed, tournament }: any) {
   const [hov, setHov] = useState(false);
   const preview = useRef([
     createCard(MOCK_PROFILES[1],"ST"),
@@ -1820,6 +1900,9 @@ function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard
             onMouseLeave={e=>{e.currentTarget.style.background="rgba(212,165,55,0.12)";e.currentTarget.style.boxShadow="0 0 12px rgba(212,165,55,0.08)";}}>🏆 Tournament</button>
         </div>
       </header>
+
+      {/* ── Registration deadline countdown ── */}
+      <RegistrationCountdown tournament={tournament}/>
 
       {/* ── Hero ── */}
       <main style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"52px 28px 36px",position:"relative",zIndex:10}}>
@@ -2938,14 +3021,30 @@ function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
 }
 
 // ─── ADMIN PANEL ──────────────────────────────────────────────
-function AdminPanel({ tournament, onSeed, onSimulate, loading }: any) {
+function AdminPanel({ tournament, onSeed, onSimulate, onDeadline, loading }: any) {
   const [pin,  setPin]  = useState("");
   const [open, setOpen] = useState(false);
   const [msg,  setMsg]  = useState("");
+  // Deadline editor — pre-populates with current value formatted for datetime-local
+  const formatLocal = (iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const [deadline, setDeadline] = useState(formatLocal(tournament?.registration_deadline));
+  useEffect(() => { setDeadline(formatLocal(tournament?.registration_deadline)); }, [tournament?.registration_deadline]);
+
   const exec = async (action: "seed"|"simulate") => {
     const fn = action==="seed" ? onSeed : onSimulate;
     setMsg("Running…");
     const result = await fn(pin);
+    setMsg(result);
+  };
+  const setDl = async () => {
+    if (!deadline) { setMsg("Pick a date first"); return; }
+    setMsg("Saving deadline…");
+    const result = await onDeadline(pin, new Date(deadline).toISOString());
     setMsg(result);
   };
   const RNAMES: Record<number,string> = {1:"R32",2:"R16",3:"QF",4:"SF",5:"Final"};
@@ -2959,7 +3058,7 @@ function AdminPanel({ tournament, onSeed, onSimulate, loading }: any) {
       </div>
       {open&&(
         <div>
-          <div style={{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap"}}>
             <input type="password" value={pin} onChange={e=>setPin(e.target.value)} placeholder="Admin PIN"
               style={{padding:"7px 12px",borderRadius:7,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",color:"#fff",fontSize:12,fontFamily:"inherit",outline:"none",width:130}}/>
             {tournament?.status==="registration"&&(
@@ -2969,8 +3068,23 @@ function AdminPanel({ tournament, onSeed, onSimulate, loading }: any) {
               <button onClick={()=>exec("simulate")} disabled={loading||!pin} style={{padding:"7px 16px",fontSize:12,fontWeight:700,borderRadius:7,background:pin?"rgba(34,197,94,0.1)":"rgba(255,255,255,0.04)",border:`1px solid ${pin?"rgba(34,197,94,0.4)":"rgba(255,255,255,0.1)"}`,color:pin?"#22C55E":"rgba(255,255,255,0.25)",cursor:pin?"pointer":"not-allowed"}}>⚡ Simulate {roundLabel}</button>
             )}
           </div>
+          {/* Registration deadline editor */}
+          {tournament?.status==="registration" && (
+            <div style={{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap",
+              padding:"10px 12px",background:"rgba(255,255,255,0.03)",borderRadius:7,border:"1px solid rgba(255,255,255,0.06)"}}>
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontWeight:700,letterSpacing:1}}>⏰ DEADLINE</span>
+              <input type="datetime-local" value={deadline} onChange={e=>setDeadline(e.target.value)}
+                style={{padding:"6px 10px",borderRadius:7,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",color:"#fff",fontSize:11,fontFamily:"inherit",outline:"none"}}/>
+              <button onClick={setDl} disabled={loading||!pin||!deadline}
+                style={{padding:"6px 14px",fontSize:11,fontWeight:700,borderRadius:7,
+                  background: pin&&deadline ? "rgba(96,165,250,0.15)" : "rgba(255,255,255,0.04)",
+                  border:`1px solid ${pin&&deadline?"rgba(96,165,250,0.4)":"rgba(255,255,255,0.1)"}`,
+                  color: pin&&deadline ? "#60A5FA" : "rgba(255,255,255,0.25)",
+                  cursor: pin&&deadline ? "pointer" : "not-allowed"}}>Set Deadline</button>
+            </div>
+          )}
           {msg&&<div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:4}}>{msg}</div>}
-          <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:6}}>Seed: shuffles teams into bracket, locks registration. Simulate: runs all matches in current round, advances winners.</div>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.2)",marginTop:6}}>Deadline: locks new mints &amp; team joins. Seed: shuffles teams into bracket. Simulate: runs all matches in current round, advances winners.</div>
         </div>
       )}
     </div>
@@ -2978,7 +3092,7 @@ function AdminPanel({ tournament, onSeed, onSimulate, loading }: any) {
 }
 
 // ─── TOURNAMENT PAGE — overview + current round ───────────────
-function TournamentPage({ teams, onBack, onBrowse, onBracket, tournament, matches, onAdminSeed, onAdminSimulate, adminLoading }: any) {
+function TournamentPage({ teams, onBack, onBrowse, onBracket, tournament, matches, onAdminSeed, onAdminSimulate, onAdminDeadline, adminLoading }: any) {
   const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const totalFilled = teams.reduce((s,t)=>s+t.memberIds.length,0);
   const totalSlots  = teams.length * 11;
@@ -3064,6 +3178,7 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, tournament, matche
         tournament={tournament}
         onSeed={onAdminSeed}
         onSimulate={onAdminSimulate}
+        onDeadline={onAdminDeadline}
         loading={adminLoading}
       />
 
@@ -3795,6 +3910,26 @@ export default function CTWCApp() {
     }
   };
 
+  // ── Admin: set registration deadline ──────────────────────────
+  const handleAdminDeadline = async (pin: string, deadline: string): Promise<string> => {
+    setAdminLoading(true);
+    try {
+      const res = await fetch("/api/tournament/deadline", {
+        method:  "POST",
+        headers: { "x-admin-pin": pin, "Content-Type": "application/json" },
+        body:    JSON.stringify({ deadline }),
+      });
+      const data = await res.json();
+      if (!res.ok) return `Error: ${data.error ?? res.statusText}`;
+      await loadTournament();
+      return `✓ Deadline set to ${new Date(data.deadline).toLocaleString()}`;
+    } catch (e) {
+      return "Network error";
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
   // ── Admin: simulate current round ─────────────────────────────
   const handleAdminSimulate = async (pin: string): Promise<string> => {
     setAdminLoading(true);
@@ -3868,7 +4003,7 @@ export default function CTWCApp() {
         </div>
       )}
 
-      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
+      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} tournament={tournament} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
       {page==="revealReady" && pending && (
         <RevealReadyGate card={pending} onOpen={() => {
@@ -3893,7 +4028,7 @@ export default function CTWCApp() {
       {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
       {page==="pool"        && <PlayerPool pool={pool} myCard={pending} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
-      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} adminLoading={adminLoading}/>}
+      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}
       {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
 
       {/* Round reveal sequence — fires after admin simulates a round */}

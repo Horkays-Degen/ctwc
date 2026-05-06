@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-server";
+import { checkRegistrationOpen } from "@/lib/registration-gate";
 
 const POSITIONS = ["GK","CB","CB","LB","RB","CM","CM","CAM","LW","RW","ST"];
 
@@ -11,6 +12,11 @@ export async function POST(req: NextRequest) {
     if (!card_id || !team_id) {
       return NextResponse.json({ error: "card_id and team_id required" }, { status: 400 });
     }
+
+    // Registration gate — locks team joins once the deadline passes or
+    // the bracket is seeded.
+    const closedReason = await checkRegistrationOpen();
+    if (closedReason) return NextResponse.json({ error: closedReason }, { status: 403 });
 
     const supabase = createAdminClient();
 
