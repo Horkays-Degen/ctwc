@@ -2,13 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-server";
 import { checkRegistrationOpen } from "@/lib/registration-gate";
 
-const POSITIONS = ["GK","CB","CB","LB","RB","CM","CM","CAM","LW","RW","ST"];
-
 // POST /api/join-team
-// Body: { card_id: string, team_id: string }
+// Body: { card_id: string, team_id: string, position?: string }
+//
+// Position-first signup model:
+//  - Client passes the slot the user picked from the pitch UI.
+//  - Server validates the slot exists in the formation AND is free.
+//  - Falls back to first-available slot if no position is provided
+//    (legacy callers / programmatic seeding).
+// 4-3-3 with CDM/CM/CAM midfield (matches the pitch UI slot layout)
+const FORMATION_SLOTS = ["GK","LB","CB","CB","RB","CDM","CM","CAM","LW","ST","RW"] as const;
+type Slot = typeof FORMATION_SLOTS[number];
+
 export async function POST(req: NextRequest) {
   try {
-    const { card_id, team_id } = await req.json();
+    const { card_id, team_id, position } = await req.json();
     if (!card_id || !team_id) {
       return NextResponse.json({ error: "card_id and team_id required" }, { status: 400 });
     }
@@ -20,25 +28,52 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Check team isn't full (max 11)
-    const { count } = await supabase
+    // Pull current roster so we can validate the requested slot.
+    const { data: roster } = await supabase
       .from("cards")
-      .select("*", { count: "exact", head: true })
+      .select("position")
       .eq("team_id", team_id);
 
-    if ((count ?? 0) >= 11) {
+    const filled = (roster ?? []).map(r => r.position).filter(Boolean) as string[];
+
+    if (filled.length >= 11) {
       return NextResponse.json({ error: "Team is full (11/11)" }, { status: 403 });
     }
 
-    // Assign position based on current count
-    const position = POSITIONS[count ?? 0] ?? "SUB";
+    // Build the list of free slots from the formation. Multi-instance
+    // positions (CB, CM) are tracked by occurrence count.
+    const formationCounts = FORMATION_SLOTS.reduce<Record<string, number>>(
+      (acc, p) => { acc[p] = (acc[p] ?? 0) + 1; return acc; }, {}
+    );
+    const filledCounts = filled.reduce<Record<string, number>>(
+      (acc, p) => { acc[p] = (acc[p] ?? 0) + 1; return acc; }, {}
+    );
+    const freeSlots: string[] = [];
+    for (const p of Object.keys(formationCounts)) {
+      const remaining = (formationCounts[p] ?? 0) - (filledCounts[p] ?? 0);
+      for (let i = 0; i < remaining; i++) freeSlots.push(p);
+    }
 
-    // Update card
+    let chosen: string;
+    if (position) {
+      // Validate the requested position is part of the formation and free
+      if (!FORMATION_SLOTS.includes(position as Slot)) {
+        return NextResponse.json({ error: `Unknown position: ${position}` }, { status: 400 });
+      }
+      if (!freeSlots.includes(position)) {
+        return NextResponse.json({ error: `${position} is already taken — pick another` }, { status: 409 });
+      }
+      chosen = position;
+    } else {
+      chosen = freeSlots[0] ?? "SUB";
+    }
+
+    // Update card — only succeeds if the card isn't already on a team
     const { data: card, error } = await supabase
       .from("cards")
-      .update({ team_id, position })
+      .update({ team_id, position: chosen })
       .eq("id", card_id)
-      .is("team_id", null)           // only if not already on a team
+      .is("team_id", null)
       .select()
       .single();
 

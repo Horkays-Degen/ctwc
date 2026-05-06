@@ -1625,49 +1625,23 @@ function PitchNode({ ps, card, isCapt, isSelected, captMode, onClick }) {
 }
 
 // ─── FOOTBALL PITCH ───────────────────────────────────────────
+// View-only formation. Click a player → opens their card. No more swap
+// mode — players pick their position at join time and it's locked.
 function FootballPitch({ team, myCardId, onTeamUpdate, onCardView }) {
-  const [captMode,  setCaptMode]  = useState(false);
-  const [selected,  setSelected]  = useState(null);
-  const [swapMsg,   setSwapMsg]   = useState("");
+  const filled = team.slots.filter((s: any) => s.card).length;
 
-  const captainId = team.captainId;
-  const isCaptain = myCardId && captainId === myCardId;
-  const filled    = team.slots.filter(s=>s.card).length;
-
-  const handleNodeClick = (slotIdx) => {
+  const handleNodeClick = (slotIdx: number) => {
     const slot = team.slots[slotIdx];
-    if (!captMode) {
-      if (slot.card) { SFX.click(); onCardView?.(slot.card); }
-      return;
-    }
-    if (selected === null) {
-      if (slot.card) { SFX.click(); setSelected(slotIdx); }
-    } else {
-      if (slotIdx !== selected) {
-        const updated = JSON.parse(JSON.stringify(team));
-        const tmp = updated.slots[selected].card;
-        updated.slots[selected].card = updated.slots[slotIdx].card;
-        updated.slots[slotIdx].card  = tmp;
-        SFX.swap();
-        setSwapMsg("Swapped positions!");
-        setTimeout(()=>setSwapMsg(""),2000);
-        onTeamUpdate?.(updated);
-      }
-      setSelected(null);
-    }
+    if (slot.card) { SFX.click(); onCardView?.(slot.card); }
   };
 
   return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
-      {/* Captain toolbar */}
-      <div style={{display:"flex",alignItems:"center",gap:12,height:36}}>
-        {isCaptain&&(
-          <button onClick={()=>{SFX.click();setCaptMode(m=>!m);setSelected(null);}} style={{padding:"6px 14px",fontSize:11,fontWeight:700,borderRadius:8,border:`1px solid ${captMode?"#FBBF24":"rgba(255,255,255,0.15)"}`,background:captMode?"rgba(212,165,55,0.15)":"transparent",color:captMode?"#FBBF24":"rgba(255,255,255,0.5)",cursor:"pointer",letterSpacing:0.5}}>
-            {captMode?"✓ Swap Mode ON":"👑 Swap Positions"}
-          </button>
-        )}
-        {captMode&&<span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>Select two players to swap their slots</span>}
-        {swapMsg&&<span style={{fontSize:11,color:"#FBBF24",fontWeight:700}}>{swapMsg}</span>}
+      {/* Status line — replaces the old swap toolbar */}
+      <div style={{display:"flex",alignItems:"center",gap:12,height:30}}>
+        <span style={{fontSize:11,color:"rgba(255,255,255,0.4)",letterSpacing:1.5,textTransform:"uppercase",fontWeight:600}}>
+          {filled}/11 Players · 4-3-3
+        </span>
       </div>
 
       {/* Pitch SVG */}
@@ -1728,9 +1702,9 @@ function FootballPitch({ team, myCardId, onTeamUpdate, onCardView }) {
         {/* Player nodes */}
         {PITCH_SLOTS.map((ps,i)=>(
           <PitchNode key={ps.id} ps={ps} card={team.slots[i].card}
-            isCapt={team.slots[i].card?.id===captainId}
-            isSelected={selected===i}
-            captMode={captMode}
+            isCapt={team.slots[i].card?.id===team.captainId}
+            isSelected={false}
+            captMode={false}
             onClick={()=>handleNodeClick(i)}
           />
         ))}
@@ -2211,6 +2185,8 @@ function BrowseTeamsPage({ card, teams, onJoined, onBack }: any) {
   const [error,   setError]   = useState<string | null>(null);
   const [search, setSearch]   = useState("");
   const [filter, setFilter]   = useState("open"); // "open" | "all"
+  // The team the user clicked "Pick Position" on — opens the picker modal
+  const [pickingTeam, setPickingTeam] = useState<any>(null);
 
   const myTeam = card ? teams.find((t: any) => t.memberIds.includes(card.id)) : null;
 
@@ -2218,26 +2194,35 @@ function BrowseTeamsPage({ card, teams, onJoined, onBack }: any) {
     .filter((t: any) => filter==="all" || t.memberIds.length < 11)
     .filter((t: any) => !search || t.name.toLowerCase().includes(search.toLowerCase()));
 
-  const join = async (team: any) => {
+  // Step 1: User clicks the team's "Pick Position" button → opens picker
+  const startPick = (team: any) => {
     if (team.memberIds.length >= 11) return;
-    if (joining) return; // already in flight
+    if (joining) return;
     SFX.click();
     setError(null);
+    setPickingTeam(team);
+  };
+
+  // Step 2: User picks a slot in the modal → fires the actual join API call
+  const confirmPick = async (position: string) => {
+    if (!pickingTeam) return;
+    const team = pickingTeam;
     setJoining(team.id);
     try {
-      // Parent calls the API and returns null on success or an error string.
-      const errMsg = await onJoined(team);
+      const errMsg = await onJoined(team, position);
       if (errMsg) {
         setError(errMsg);
         setJoining(null);
+        setPickingTeam(null);
         return;
       }
       SFX.success();
-      // On success the parent navigates away — leave joining set so this
-      // page tears down without the button flashing back to enabled.
+      // On success parent navigates to TeamPage — leave joining set so the
+      // button stays disabled until this page unmounts.
     } catch (e: any) {
       setError("Unexpected error — try again");
       setJoining(null);
+      setPickingTeam(null);
     }
   };
 
@@ -2372,10 +2357,10 @@ function BrowseTeamsPage({ card, teams, onJoined, onBack }: any) {
                   ) : isFull ? (
                     <div style={{width:"100%",padding:"8px",fontSize:12,fontWeight:600,color:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:8,textAlign:"center"}}>Squad Full</div>
                   ) : (
-                    <button onClick={()=>!isJoining&&join(team)} style={{width:"100%",padding:"9px",fontSize:12,fontWeight:700,color:isJoining?"#1a1a1a":"#fff",background:isJoining?`linear-gradient(135deg,${team.color},${team.color}aa)`:"rgba(255,255,255,0.05)",border:`1px solid ${team.color}40`,borderRadius:8,cursor:"pointer",transition:"all 0.25s"}}
+                    <button onClick={()=>!isJoining&&startPick(team)} style={{width:"100%",padding:"9px",fontSize:12,fontWeight:700,color:isJoining?"#1a1a1a":"#fff",background:isJoining?`linear-gradient(135deg,${team.color},${team.color}aa)`:"rgba(255,255,255,0.05)",border:`1px solid ${team.color}40`,borderRadius:8,cursor:"pointer",transition:"all 0.25s"}}
                       onMouseEnter={e=>{e.currentTarget.style.background=`${team.color}22`;}}
                       onMouseLeave={e=>{e.currentTarget.style.background=isJoining?`linear-gradient(135deg,${team.color},${team.color}aa)`:"rgba(255,255,255,0.05)";}}>
-                      {isJoining?"Joining…":"Join Team"}
+                      {isJoining?"Joining…":"Pick Position"}
                     </button>
                   )}
                 </div>
@@ -2383,6 +2368,174 @@ function BrowseTeamsPage({ card, teams, onJoined, onBack }: any) {
             })}
           </div>
         )}
+      </div>
+
+      {/* Position picker modal */}
+      {pickingTeam && (
+        <PositionPickerModal
+          team={pickingTeam}
+          onPick={confirmPick}
+          onCancel={() => { if (!joining) setPickingTeam(null); }}
+          loading={!!joining}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── POSITION PICKER MODAL ────────────────────────────────────
+// Shows the football pitch with empty slots highlighted as clickable.
+// Filled slots show the existing player's avatar and are disabled.
+function PositionPickerModal({ team, onPick, onCancel, loading }: any) {
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  // Build a map of which slots are taken: for multi-instance positions
+  // (CB×2), match against PITCH_SLOTS by slot ID using occurrence order.
+  const filledByPos: Record<string, any[]> = {};
+  team.slots.forEach((s: any) => {
+    if (s.card) {
+      if (!filledByPos[s.pos]) filledByPos[s.pos] = [];
+      filledByPos[s.pos].push(s.card);
+    }
+  });
+
+  // Walk PITCH_SLOTS and decide if each is taken (by occurrence)
+  const occurrenceCount: Record<string, number> = {};
+  const slotState = PITCH_SLOTS.map((ps) => {
+    occurrenceCount[ps.pos] = (occurrenceCount[ps.pos] ?? 0) + 1;
+    const occIndex = occurrenceCount[ps.pos] - 1;
+    const card = filledByPos[ps.pos]?.[occIndex] ?? null;
+    return { ...ps, card };
+  });
+
+  return (
+    <div onClick={onCancel} style={{
+      position:"fixed",inset:0,zIndex:200,
+      background:"rgba(0,0,0,0.92)",backdropFilter:"blur(14px)",
+      display:"flex",alignItems:"center",justifyContent:"center",
+      cursor: loading ? "default" : "pointer",
+      fontFamily:"'Segoe UI',system-ui,sans-serif",
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        cursor:"default",
+        background:"linear-gradient(180deg, #0a1424, #04060d)",
+        border:`1px solid ${team.color}55`,
+        borderRadius:14,padding:"22px 24px 20px",
+        boxShadow:`0 0 50px ${team.color}33, 0 12px 50px rgba(0,0,0,0.85)`,
+        animation:"holoIn 0.22s cubic-bezier(0.22,1,0.36,1) both",
+        maxWidth:480,width:"90%",
+      }}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",gap:11,marginBottom:14}}>
+          <div style={{width:42,height:42,borderRadius:10,background:team.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+            boxShadow:`0 0 14px ${team.color}66`}}>
+            <EmblemImg team={team} size={24}/>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:9,fontWeight:700,letterSpacing:3,color:"rgba(255,255,255,0.4)"}}>JOIN TEAM</div>
+            <div style={{fontSize:18,fontWeight:900,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team.name}</div>
+          </div>
+          <button onClick={onCancel} disabled={loading} style={{
+            background:"transparent",border:"none",color:"rgba(255,255,255,0.5)",
+            fontSize:18,cursor: loading ? "default" : "pointer",padding:4,
+          }}>✕</button>
+        </div>
+
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.55)",marginBottom:14,lineHeight:1.5}}>
+          Tap an empty slot to claim it. Already taken slots show the existing player.
+        </div>
+
+        {/* Pitch */}
+        <div style={{position:"relative",margin:"0 auto",width:400,maxWidth:"100%",aspectRatio:"400/540"}}>
+          <svg viewBox="0 0 400 540" style={{width:"100%",height:"100%",display:"block"}}>
+            {/* Pitch background */}
+            <defs>
+              <linearGradient id="pitchPick" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor="#0d4520"/>
+                <stop offset="100%" stopColor="#082815"/>
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="400" height="540" rx="14" fill="url(#pitchPick)"/>
+            {/* Field markings */}
+            <g stroke="rgba(255,255,255,0.12)" strokeWidth="1.5" fill="none">
+              <rect x="6" y="6" width="388" height="528" rx="8"/>
+              <line x1="6" y1="270" x2="394" y2="270"/>
+              <circle cx="200" cy="270" r="52"/>
+              <rect x="120" y="6"   width="160" height="60"/>
+              <rect x="120" y="474" width="160" height="60"/>
+              <rect x="160" y="6"   width="80"  height="22"/>
+              <rect x="160" y="512" width="80"  height="22"/>
+            </g>
+            {/* Slot markers */}
+            {slotState.map((s) => {
+              const taken = !!s.card;
+              const isHov = hovered === `${s.pos}-${s.id}`;
+              const r = 28;
+              return (
+                <g key={s.id}
+                  onMouseEnter={() => !taken && !loading && setHovered(`${s.pos}-${s.id}`)}
+                  onMouseLeave={() => setHovered(null)}
+                  onClick={() => !taken && !loading && onPick(s.pos)}
+                  style={{ cursor: taken || loading ? "default" : "pointer" }}>
+                  {/* Glow ring on hover */}
+                  {isHov && (
+                    <circle cx={s.x} cy={s.y} r={r + 12} fill={team.color} opacity="0.18"/>
+                  )}
+                  {/* Drop shadow */}
+                  <circle cx={s.x} cy={s.y} r={r + 2} fill="rgba(0,0,0,0.45)"/>
+                  {/* Main circle */}
+                  <circle cx={s.x} cy={s.y} r={r}
+                    fill={taken ? aColor(s.card.displayName) : isHov ? `${team.color}55` : "rgba(255,255,255,0.06)"}
+                    stroke={taken ? s.card.tier.border : isHov ? team.color : "rgba(255,255,255,0.25)"}
+                    strokeWidth={taken || isHov ? 2.5 : 1.5}
+                    strokeDasharray={taken ? "0" : "5 3"}/>
+                  {/* Avatar (if taken) — clipped to circle */}
+                  {taken && s.card.avatarUrl && (
+                    <>
+                      <defs>
+                        <clipPath id={`pickclip-${s.id}`}>
+                          <circle cx={s.x} cy={s.y} r={r}/>
+                        </clipPath>
+                      </defs>
+                      <image
+                        href={proxyAvatar(s.card.avatarUrl)}
+                        x={s.x - r} y={s.y - r} width={r * 2} height={r * 2}
+                        clipPath={`url(#pickclip-${s.id})`}
+                        preserveAspectRatio="xMidYMin slice"
+                      />
+                    </>
+                  )}
+                  {/* Position label */}
+                  <rect x={s.x - 18} y={s.y + r + 2} width="36" height="14" rx="4"
+                    fill={taken ? "rgba(0,0,0,0.85)" : isHov ? team.color : "rgba(0,0,0,0.7)"}/>
+                  <text x={s.x} y={s.y + r + 12} fontSize="9" fontWeight="800"
+                    fill={taken ? s.card.tier.textColor : "#fff"}
+                    fontFamily="'Segoe UI',system-ui,sans-serif" textAnchor="middle">
+                    {s.pos}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Hover hint at bottom */}
+        <div style={{
+          marginTop:12,padding:"8px 12px",borderRadius:7,
+          background:hovered ? `${team.color}1f` : "rgba(255,255,255,0.03)",
+          border:`1px solid ${hovered ? team.color : "rgba(255,255,255,0.08)"}55`,
+          fontSize:11,fontWeight:600,color:hovered ? "#fff" : "rgba(255,255,255,0.4)",
+          textAlign:"center",letterSpacing:0.5,minHeight:32,
+          display:"flex",alignItems:"center",justifyContent:"center",
+          transition:"all 0.18s",
+        }}>
+          {loading
+            ? "Joining…"
+            : hovered
+              ? `Click ${hovered.split("-")[0]} to claim this slot`
+              : "Hover an empty slot — green = available"
+          }
+        </div>
       </div>
     </div>
   );
@@ -4307,13 +4460,14 @@ export default function CTWCApp() {
 
   // ── Join team (calls /api/join-team) ─────────────────────────
   // Returns null on success, or an error message string for the caller to display.
-  const handleJoinedTeam = async (team: any): Promise<string | null> => {
+  // `position` is the slot the user picked from the pitch UI.
+  const handleJoinedTeam = async (team: any, position?: string): Promise<string | null> => {
     if (!pending) return "You don't have a card yet.";
     try {
       const res = await fetch("/api/join-team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ card_id: pending.id, team_id: team.id }),
+        body: JSON.stringify({ card_id: pending.id, team_id: team.id, position }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
