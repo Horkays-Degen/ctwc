@@ -2553,12 +2553,45 @@ function LeaderboardPage({ pool, teams, myCard, onBack, onClaim }: any) {
   );
 }
 
-// ─── PLAYER POOL ─────────────────────────────────────────────
+// ─── PLAYER POOL / CARD COLLECTION ────────────────────────────
+const POSITION_FILTERS = ["All","GK","CB","LB","RB","CM","CAM","LW","RW","ST"];
+const SORT_OPTIONS = [
+  { k:"ovr-desc",   label:"OVR ↓" },
+  { k:"ovr-asc",    label:"OVR ↑" },
+  { k:"name-asc",   label:"A → Z" },
+  { k:"recent",     label:"Newest" },
+  { k:"followers",  label:"Followers" },
+];
+
 function PlayerPool({ pool, myCard, onBack, onClaim }) {
-  const [filter,setFilter]=useState("All"), [selected,setSelected]=useState(null);
+  const [filter,setFilter]   = useState("All");
+  const [posFilter,setPosFilter] = useState("All");
+  const [search,setSearch]   = useState("");
+  const [sort,setSort]       = useState("ovr-desc");
+  const [selected,setSelected] = useState(null);
   const tierNames=["All","Mythic","CT Legend","CT Elite","CT Star","CT Player"];
-  const visible=filter==="All"?pool:pool.filter(c=>c.tier.name===filter);
-  const counts={};Object.values(TIERS).forEach(t=>{counts[t.name]=pool.filter(c=>c.tier.name===t.name).length;});
+
+  const counts: any = {}; Object.values(TIERS).forEach(t=>{ counts[t.name] = pool.filter(c=>c.tier.name===t.name).length; });
+
+  const visible = useMemo(() => {
+    let v = pool;
+    if (filter !== "All") v = v.filter(c => c.tier.name === filter);
+    if (posFilter !== "All") v = v.filter(c => c.position?.code === posFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      v = v.filter(c => c.displayName.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q));
+    }
+    const sorted = [...v];
+    switch (sort) {
+      case "ovr-asc":   sorted.sort((a,b)=> a.ovr - b.ovr); break;
+      case "ovr-desc":  sorted.sort((a,b)=> b.ovr - a.ovr); break;
+      case "name-asc":  sorted.sort((a,b)=> a.displayName.localeCompare(b.displayName)); break;
+      case "followers": sorted.sort((a,b)=> (b.rawProfile?.followers ?? 0) - (a.rawProfile?.followers ?? 0)); break;
+      case "recent":    /* server already returns most recent first */ break;
+    }
+    return sorted;
+  }, [pool, filter, posFilter, search, sort]);
+
   const hasClaimed = !!myCard;
 
   return (
@@ -2579,6 +2612,56 @@ function PlayerPool({ pool, myCard, onBack, onClaim }) {
       </div>
 
       <div style={{maxWidth:1100,margin:"0 auto",padding:"22px 20px"}}>
+        {/* Search + Sort row */}
+        <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{position:"relative",flex:"1 1 260px",minWidth:240}}>
+            <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"rgba(255,255,255,0.3)"}}>🔍</span>
+            <input
+              value={search}
+              onChange={e=>setSearch(e.target.value)}
+              placeholder="Search name or @handle…"
+              style={{
+                width:"100%",padding:"10px 14px 10px 36px",fontSize:12,
+                background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",
+                borderRadius:9,color:"#fff",outline:"none",fontFamily:"inherit",
+              }}
+              onFocus={e=>{ e.currentTarget.style.borderColor="rgba(212,165,55,0.4)"; }}
+              onBlur ={e=>{ e.currentTarget.style.borderColor="rgba(255,255,255,0.08)"; }}
+            />
+            {search && (
+              <button onClick={()=>setSearch("")} style={{
+                position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",
+                background:"transparent",border:"none",color:"rgba(255,255,255,0.4)",
+                fontSize:14,cursor:"pointer",padding:4,
+              }}>✕</button>
+            )}
+          </div>
+          <select value={sort} onChange={e=>setSort(e.target.value)} style={{
+            padding:"10px 12px",fontSize:11,fontWeight:700,
+            background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",
+            borderRadius:9,color:"#fff",outline:"none",cursor:"pointer",fontFamily:"inherit",
+          }}>
+            {SORT_OPTIONS.map(o => <option key={o.k} value={o.k} style={{background:"#0a0e18"}}>{o.label}</option>)}
+          </select>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginLeft:"auto"}}>
+            {visible.length} {visible.length === 1 ? "card" : "cards"}
+          </div>
+        </div>
+
+        {/* Position filter */}
+        <div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"wrap"}}>
+          {POSITION_FILTERS.map(p => (
+            <button key={p} onClick={()=>setPosFilter(p)} style={{
+              padding:"4px 11px",fontSize:10,fontWeight:700,borderRadius:5,
+              cursor:"pointer",letterSpacing:0.5,
+              background: posFilter === p ? "rgba(96,165,250,0.18)" : "transparent",
+              border: `1px solid ${posFilter === p ? "rgba(96,165,250,0.5)" : "rgba(255,255,255,0.08)"}`,
+              color: posFilter === p ? "#60A5FA" : "rgba(255,255,255,0.4)",
+            }}>{p}</button>
+          ))}
+        </div>
+
+        {/* Tier filter */}
         <div style={{display:"flex",gap:6,marginBottom:20,flexWrap:"wrap"}}>
           {tierNames.map(name=>{const t=Object.values(TIERS).find(x=>x.name===name);return(<button key={name} onClick={()=>setFilter(name)} style={{padding:"6px 14px",fontSize:11,fontWeight:700,borderRadius:16,cursor:"pointer",background:filter===name?(t?`${t.border}30`:"rgba(255,255,255,0.1)"):"transparent",border:`1px solid ${filter===name?(t?t.border:"rgba(255,255,255,0.2)"):"rgba(255,255,255,0.07)"}`,color:filter===name?(t?t.accent:"#fff"):"rgba(255,255,255,0.4)"}}>
             {name}{name!=="All"&&` (${counts[name]||0})`}</button>);})}
