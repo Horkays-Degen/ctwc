@@ -1778,6 +1778,83 @@ function Nav({ onHome, right = null }: { onHome: any; right?: any }) {
 }
 
 // ─── LANDING ──────────────────────────────────────────────────
+// ─── NOTIFICATION STACK ───────────────────────────────────────
+// Toast-style notifications stacked in the top-right. Each entry has a
+// timestamp, color, icon, title/body, and an optional opponent team.
+function NotificationStack({ notifications, onDismiss, onClick }: any) {
+  if (!notifications || notifications.length === 0) return null;
+  return (
+    <div style={{
+      position:"fixed",top:18,right:18,zIndex:500,
+      display:"flex",flexDirection:"column",gap:10,
+      pointerEvents:"none", // children re-enable
+      maxWidth:340,
+    }}>
+      {notifications.map((n: any) => (
+        <div key={n.id}
+          onClick={() => onClick?.(n)}
+          style={{
+            pointerEvents:"auto",cursor:"pointer",
+            background:"linear-gradient(135deg, rgba(8,12,22,0.96), rgba(15,23,42,0.96))",
+            border:`1px solid ${n.color}66`,
+            borderLeft:`4px solid ${n.color}`,
+            borderRadius:11,
+            padding:"12px 14px 12px 14px",
+            display:"flex",gap:11,alignItems:"flex-start",
+            boxShadow:`0 0 24px ${n.color}33, 0 8px 24px rgba(0,0,0,0.6)`,
+            backdropFilter:"blur(14px)",
+            animation:"notifSlide 0.3s cubic-bezier(0.22,1,0.36,1) both",
+            position:"relative",
+            fontFamily:"'Segoe UI',system-ui,sans-serif",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "translateX(-3px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = "translateX(0)"; }}
+        >
+          <div style={{fontSize:24,lineHeight:1,flexShrink:0}}>{n.icon}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+              <span style={{fontSize:12,fontWeight:900,color:n.color,letterSpacing:0.4}}>{n.title}</span>
+              {n.subtitle && <span style={{fontSize:9,fontWeight:700,letterSpacing:1,color:"rgba(255,255,255,0.45)",textTransform:"uppercase"}}>· {n.subtitle}</span>}
+            </div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.78)",fontWeight:500}}>{n.body}</div>
+            {n.opponent && (
+              <div style={{display:"flex",alignItems:"center",gap:5,marginTop:4,fontSize:10,color:n.opponent.color,fontWeight:700}}>
+                <EmblemImg team={n.opponent} size={11}/>
+                <span>{n.opponent.name}</span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDismiss?.(n.id); }}
+            style={{
+              background:"transparent",border:"none",
+              color:"rgba(255,255,255,0.4)",fontSize:13,cursor:"pointer",
+              padding:2,marginLeft:4,
+            }}
+            aria-label="Dismiss"
+          >✕</button>
+          {/* Auto-dismiss progress bar */}
+          <div style={{
+            position:"absolute",bottom:0,left:0,height:2,
+            width:"100%",background:"rgba(255,255,255,0.06)",overflow:"hidden",
+            borderRadius:"0 0 11px 11px",
+          }}>
+            <div style={{
+              height:"100%",background:n.color,
+              animation:"notifBar 9s linear forwards",
+              boxShadow:`0 0 6px ${n.color}`,
+            }}/>
+          </div>
+        </div>
+      ))}
+      <style>{`
+        @keyframes notifSlide { from { opacity:0; transform:translateX(40px) } to { opacity:1; transform:translateX(0) } }
+        @keyframes notifBar   { from { width:100% } to { width:0% } }
+      `}</style>
+    </div>
+  );
+}
+
 // ─── REGISTRATION COUNTDOWN ───────────────────────────────────
 // Live ticker banner shown above the hero. Hides when no deadline is set
 // or after the bracket is seeded (registration already closed).
@@ -3991,6 +4068,8 @@ export default function CTWCApp() {
   const [adminLoading,  setAdminLoading]  = useState(false);
   // Active round-reveal sequence (set after a successful simulate)
   const [reveal, setReveal] = useState<{ results: any[]; round: number; isFinal: boolean } | null>(null);
+  // Stacked in-app notifications (team match results, etc.)
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   const supabase = createClient();
 
@@ -4099,6 +4178,57 @@ export default function CTWCApp() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // ── Real-time: match results — push notifications for the user's team ──
+  useEffect(() => {
+    const myTeamId = pending?.teamId;
+    if (!myTeamId) return;
+    const ch = supabase
+      .channel("match-changes")
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "matches",
+      }, (payload: any) => {
+        const m = payload.new;
+        if (!m || m.status !== "complete") return;
+        // Only notify if the user's team played in this match
+        if (m.home_id !== myTeamId && m.away_id !== myTeamId) return;
+
+        // Avoid duplicate notifications for the same match
+        setNotifications(prev => {
+          if (prev.some(n => n.matchId === m.id)) return prev;
+          const isHome   = m.home_id === myTeamId;
+          const myScore  = isHome ? m.home_score : m.away_score;
+          const oppScore = isHome ? m.away_score : m.home_score;
+          const oppId    = isHome ? m.away_id    : m.home_id;
+          const oppTeam  = teams.find((t: any) => t.id === oppId);
+          const won      = m.winner_id === myTeamId;
+          const draw     = m.winner_id == null;
+          const round    = m.round_num;
+          const ROUND_LABELS: any = { 1:"Round of 32", 2:"Round of 16", 3:"Quarter Finals", 4:"Semi Finals", 5:"Final" };
+
+          const note = {
+            id:       `m-${m.id}`,
+            matchId:  m.id,
+            ts:       Date.now(),
+            color:    won ? "#22C55E" : draw ? "#FBBF24" : "#EF4444",
+            icon:     won ? "🏆" : draw ? "⚖️" : "💔",
+            title:    won ? "Your team WON" : draw ? "Match drawn" : "Your team lost",
+            subtitle: ROUND_LABELS[round] ?? `Round ${round}`,
+            body:     `${myScore}–${oppScore} vs ${oppTeam?.name ?? "Unknown"}`,
+            opponent: oppTeam ?? null,
+          };
+          // Auto-dismiss after 9s
+          setTimeout(() => {
+            setNotifications(p => p.filter(n => n.id !== note.id));
+          }, 9000);
+          // Play sound (best effort)
+          try { won ? SFX.crowd("roar") : SFX.click(); } catch {}
+          return [note, ...prev].slice(0, 4); // cap at 4 stacked
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [pending?.teamId, teams]);
 
   // ── Derived state ────────────────────────────────────────────
   const viewTeam = useMemo(() => teams.find(t => t.id === viewTeamId) || null, [teams, viewTeamId]);
@@ -4306,6 +4436,13 @@ export default function CTWCApp() {
       {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
       {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}
       {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
+
+      {/* Live in-app notifications (e.g. user's team match results) */}
+      <NotificationStack
+        notifications={notifications}
+        onDismiss={(id: string) => setNotifications(prev => prev.filter(n => n.id !== id))}
+        onClick={() => setPage("bracket")}
+      />
 
       {/* Round reveal sequence — fires after admin simulates a round */}
       {reveal && (
