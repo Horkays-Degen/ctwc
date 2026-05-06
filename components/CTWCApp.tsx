@@ -1858,7 +1858,7 @@ function RegistrationCountdown({ tournament }: any) {
   );
 }
 
-function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard, onMyTeam, sessionLoading, totalClaimed, tournament }: any) {
+function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool, teams, myCard, onMyTeam, sessionLoading, totalClaimed, tournament }: any) {
   const [hov, setHov] = useState(false);
   const preview = useRef([
     createCard(MOCK_PROFILES[1],"ST"),
@@ -1895,6 +1895,9 @@ function Landing({ onConnect, onPool, onTeams, onTournament, pool, teams, myCard
           <button onClick={onTeams} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.55)",borderRadius:8,padding:"7px 15px",cursor:"pointer",fontSize:12,fontWeight:600,transition:"all 0.2s"}}
             onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.2)";e.currentTarget.style.color="rgba(255,255,255,0.9)";}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.08)";e.currentTarget.style.color="rgba(255,255,255,0.55)";}}>Teams</button>
+          <button onClick={onLeaderboard} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.55)",borderRadius:8,padding:"7px 15px",cursor:"pointer",fontSize:12,fontWeight:600,transition:"all 0.2s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.2)";e.currentTarget.style.color="rgba(255,255,255,0.9)";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.08)";e.currentTarget.style.color="rgba(255,255,255,0.55)";}}>📊 Leaderboard</button>
           <button onClick={onTournament} style={{background:"rgba(212,165,55,0.12)",border:"1px solid rgba(212,165,55,0.3)",color:"#FBBF24",borderRadius:8,padding:"7px 15px",cursor:"pointer",fontSize:12,fontWeight:700,transition:"all 0.2s",boxShadow:"0 0 12px rgba(212,165,55,0.08)"}}
             onMouseEnter={e=>{e.currentTarget.style.background="rgba(212,165,55,0.22)";e.currentTarget.style.boxShadow="0 0 22px rgba(212,165,55,0.22)";}}
             onMouseLeave={e=>{e.currentTarget.style.background="rgba(212,165,55,0.12)";e.currentTarget.style.boxShadow="0 0 12px rgba(212,165,55,0.08)";}}>🏆 Tournament</button>
@@ -2356,6 +2359,195 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── LEADERBOARD ──────────────────────────────────────────────
+// Top 50 cards across multiple metrics. Live — refreshes whenever the
+// pool re-syncs (which happens after every stat refresh).
+const LB_METRICS = [
+  { k:"ovr",       label:"Top OVR",      icon:"🏆", get:(c:any)=>c.ovr ?? 0,
+    fmt:(v:number)=>`${v}` },
+  { k:"reach",     label:"Top Reach",    icon:"📡", get:(c:any)=>c.stats?.INF ?? 0,
+    fmt:(v:number)=>`${v}` },
+  { k:"alpha",     label:"Alpha Callers",icon:"⚡", get:(c:any)=>c.stats?.ENG ?? 0,
+    fmt:(v:number)=>`${v}` },
+  { k:"viral",     label:"Most Viral",   icon:"🔥", get:(c:any)=>c.stats?.VRL ?? 0,
+    fmt:(v:number)=>`${v}` },
+  { k:"grind",     label:"Top Grinders", icon:"⛏", get:(c:any)=>c.stats?.VOL ?? 0,
+    fmt:(v:number)=>`${v}` },
+  { k:"clutch",    label:"Most Clutch",  icon:"💎", get:(c:any)=>c.stats?.CLT ?? 0,
+    fmt:(v:number)=>`${v}` },
+  { k:"followers", label:"Most Followers",icon:"🌐", get:(c:any)=>c.rawProfile?.followers ?? 0,
+    fmt:(v:number)=>v.toLocaleString() },
+];
+
+function LeaderboardPage({ pool, teams, myCard, onBack, onClaim }: any) {
+  const [metric, setMetric] = useState(LB_METRICS[0]);
+  const [selected, setSelected] = useState<any>(null);
+
+  const teamById = useMemo(() => {
+    const m: Record<string, any> = {};
+    teams.forEach((t: any) => { m[t.id] = t; });
+    return m;
+  }, [teams]);
+
+  const sorted = useMemo(() => {
+    return [...pool]
+      .sort((a, b) => metric.get(b) - metric.get(a))
+      .slice(0, 50);
+  }, [pool, metric]);
+
+  const myRank = myCard ? sorted.findIndex(c => c.id === myCard.id) + 1 : 0;
+
+  return (
+    <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+      {selected && (
+        <div onClick={()=>setSelected(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",backdropFilter:"blur(16px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+          <InteractiveCard card={selected} size="large" scale={1.5}/>
+        </div>
+      )}
+
+      <Nav onHome={onBack} right={
+        myCard
+          ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",borderRadius:8,background:"rgba(34,197,94,0.08)",border:"1px solid rgba(34,197,94,0.2)"}}>
+              <div style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",boxShadow:"0 0 6px #22C55E"}}/>
+              <span style={{fontSize:11,fontWeight:700,color:"#22C55E"}}>{myRank > 0 ? `Ranked #${myRank}` : `OVR ${myCard.ovr}`}</span>
+            </div>
+          : <button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>
+      }/>
+
+      {/* Header */}
+      <div style={{
+        background:"linear-gradient(180deg, rgba(212,165,55,0.08), transparent)",
+        borderBottom:"1px solid rgba(255,255,255,0.05)",
+        padding:"28px 24px 22px",textAlign:"center",
+      }}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:5,color:"rgba(255,255,255,0.4)",marginBottom:6}}>CTWC LIVE</div>
+        <div style={{fontSize:36,fontWeight:900,color:"#FBBF24",letterSpacing:2,
+          textShadow:"0 0 24px rgba(212,165,55,0.5)"}}>🏆 Leaderboard</div>
+        <div style={{fontSize:12,color:"rgba(255,255,255,0.45)",marginTop:6}}>
+          Top {sorted.length} CT players · refreshed live with each round
+        </div>
+      </div>
+
+      {/* Metric tabs */}
+      <div style={{padding:"16px 24px",display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",
+        borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+        {LB_METRICS.map(m => (
+          <button key={m.k} onClick={()=>setMetric(m)} style={{
+            display:"flex",alignItems:"center",gap:7,
+            padding:"8px 16px",fontSize:11,fontWeight:700,letterSpacing:0.5,
+            background: metric.k === m.k ? "rgba(212,165,55,0.18)" : "transparent",
+            border: `1px solid ${metric.k === m.k ? "rgba(212,165,55,0.5)" : "rgba(255,255,255,0.08)"}`,
+            color: metric.k === m.k ? "#FBBF24" : "rgba(255,255,255,0.55)",
+            borderRadius:18,cursor:"pointer",
+            boxShadow: metric.k === m.k ? "0 0 14px rgba(212,165,55,0.25)" : "none",
+            transition:"all 0.18s",
+          }}>
+            <span>{m.icon}</span><span>{m.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      <div style={{maxWidth:760,margin:"0 auto",padding:"22px 18px 40px"}}>
+        {sorted.map((c, i) => {
+          const team = c.teamId ? teamById[c.teamId] : null;
+          const isMe = myCard?.id === c.id;
+          const v    = metric.get(c);
+          const rank = i + 1;
+          const podiumColor = rank === 1 ? "#FBBF24" : rank === 2 ? "#C0C0C0" : rank === 3 ? "#CD7F32" : null;
+          return (
+            <div key={c.id} onClick={()=>setSelected(c)} style={{
+              display:"flex",alignItems:"center",gap:14,
+              padding:"11px 16px",marginBottom:6,borderRadius:11,
+              background: isMe
+                ? "linear-gradient(90deg, rgba(212,165,55,0.18), rgba(212,165,55,0.06))"
+                : "rgba(255,255,255,0.02)",
+              border: isMe
+                ? "1px solid rgba(212,165,55,0.55)"
+                : `1px solid ${c.tier.border}22`,
+              cursor:"pointer",transition:"all 0.18s",
+              boxShadow: isMe ? "0 0 18px rgba(212,165,55,0.18)" : "none",
+            }}
+            onMouseEnter={e=>{ if(!isMe) e.currentTarget.style.background="rgba(255,255,255,0.05)"; }}
+            onMouseLeave={e=>{ if(!isMe) e.currentTarget.style.background="rgba(255,255,255,0.02)"; }}>
+              {/* Rank */}
+              <div style={{
+                width:38,textAlign:"center",fontSize:rank<=3?20:14,fontWeight:900,
+                color: podiumColor ?? (isMe ? "#FBBF24" : "rgba(255,255,255,0.5)"),
+                textShadow: podiumColor ? `0 0 12px ${podiumColor}88` : "none",
+                flexShrink:0,
+              }}>
+                {rank <= 3 ? (rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉") : `#${rank}`}
+              </div>
+
+              {/* Avatar */}
+              <div style={{
+                width:42,height:42,borderRadius:9,overflow:"hidden",flexShrink:0,
+                background: aColor(c.displayName),
+                border:`1.5px solid ${c.tier.border}77`,
+                boxShadow:`0 0 10px ${c.tier.glow}`,
+              }}>
+                {c.avatarUrl
+                  ? <img src={proxyAvatar(c.avatarUrl)} alt={c.displayName} crossOrigin="anonymous"
+                      style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 8%"}}/>
+                  : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:13,fontWeight:800,color:"#fff"}}>{inits(c.displayName)}</div>
+                }
+              </div>
+
+              {/* Name + handle + team */}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:7}}>
+                  <span style={{fontSize:14,fontWeight:800,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {c.displayName}
+                  </span>
+                  {isMe && <span style={{fontSize:9,fontWeight:800,color:"#FBBF24",letterSpacing:1.5}}>YOU</span>}
+                  {c.rawProfile?.verified && <span style={{fontSize:11,color:"#1D9BF0"}}>✓</span>}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:1,flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"monospace"}}>@{c.handle}</span>
+                  {team && (
+                    <>
+                      <span style={{fontSize:9,color:"rgba(255,255,255,0.2)"}}>·</span>
+                      <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:team.color,fontWeight:700}}>
+                        <EmblemImg team={team} size={11}/>
+                        <span style={{maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team.name}</span>
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Tier pill */}
+              <div style={{
+                fontSize:9,fontWeight:800,letterSpacing:1.5,
+                padding:"3px 9px",borderRadius:5,
+                background:`${c.tier.bg}99`,color:c.tier.accent,
+                border:`1px solid ${c.tier.border}66`,flexShrink:0,
+              }}>{c.tier.name.replace("CT ","").toUpperCase()}</div>
+
+              {/* Metric value */}
+              <div style={{textAlign:"right",flexShrink:0,minWidth:62}}>
+                <div style={{fontSize:22,fontWeight:900,color:c.tier.accent,lineHeight:1,
+                  textShadow:`0 0 10px ${c.tier.glow}`}}>{metric.fmt(v)}</div>
+                <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,color:"rgba(255,255,255,0.35)",marginTop:2,textTransform:"uppercase"}}>
+                  {metric.label.replace(/^Top |Most |Top$/g,"").trim()}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {sorted.length === 0 && (
+          <div style={{textAlign:"center",padding:60,color:"rgba(255,255,255,0.3)"}}>
+            <div style={{fontSize:42,marginBottom:10}}>📊</div>
+            <div style={{fontSize:13}}>No cards in the pool yet — be the first!</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -4003,7 +4195,8 @@ export default function CTWCApp() {
         </div>
       )}
 
-      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} tournament={tournament} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
+      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} onLeaderboard={()=>setPage("leaderboard")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} tournament={tournament} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
+      {page==="leaderboard" && <LeaderboardPage pool={pool} teams={teams} myCard={pending} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
       {page==="revealReady" && pending && (
         <RevealReadyGate card={pending} onOpen={() => {
