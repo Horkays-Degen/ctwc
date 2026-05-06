@@ -5,7 +5,11 @@ import { toPng } from "html-to-image";
 import { createClient } from "@/lib/supabase";
 
 // ─── DATA TRANSFORMS (Supabase rows → UI shape) ───────────────
-const SLOT_POSITIONS = ["GK","CB","CB","LB","RB","CM","CM","CAM","LW","RW","ST"];
+// Single source of truth for the formation. MUST match:
+//  - app/api/join-team/route.ts FORMATION_SLOTS
+//  - app/api/tournament/simulate/route.ts SLOT_POSITIONS
+//  - PITCH_SLOTS visual layout (pos field of each slot)
+const SLOT_POSITIONS = ["GK","LB","CB","CB","RB","CDM","CM","CAM","LW","ST","RW"];
 
 function transformCard(row: any) {
   // Resolve tier: DB stores the name string; ShieldCard needs the full TIERS object
@@ -37,9 +41,13 @@ function transformCard(row: any) {
 
 function transformTeam(teamRow: any, allCards: any[]) {
   const teamCards = allCards.filter(c => c.team_id === teamRow.id);
-  const slots = SLOT_POSITIONS.map((pos, i) => {
-    const card = teamCards.find(c => c.position === pos && teamCards.indexOf(c) === i) ||
-                 teamCards[i] || null;
+  // Strict position-to-slot match. Each card occupies its declared position
+  // and only its declared position. Multi-instance positions (CB×2) consume
+  // cards in DB order. Cards without a matching slot are simply not shown.
+  const usedCardIds = new Set<string>();
+  const slots = SLOT_POSITIONS.map((pos) => {
+    const card = teamCards.find((c: any) => c.position === pos && !usedCardIds.has(c.id));
+    if (card) usedCardIds.add(card.id);
     return { pos, card: card ? transformCard(card) : null };
   });
   return {

@@ -66,12 +66,17 @@ export async function POST(req: NextRequest) {
     cardsByTeam[c.team_id].push(c);
   }
 
-  // Build PlayerSlot array for a team
-  const SLOT_POSITIONS = ["GK","CB","CB","LB","RB","CM","CM","CAM","LW","RW","ST"];
+  // Build PlayerSlot array for a team — must match the formation used in
+  // /api/join-team and the client transformTeam SLOT_POSITIONS.
+  const SLOT_POSITIONS = ["GK","LB","CB","CB","RB","CDM","CM","CAM","LW","ST","RW"];
   const buildSlots = (teamId: string) => {
     const teamCards = cardsByTeam[teamId] ?? [];
+    // Multi-instance positions (CB×2) consume cards in DB order — same
+    // logic as the client's transformTeam.
+    const used = new Set<string>();
     return SLOT_POSITIONS.map((pos) => {
-      const card = teamCards.find((c: any) => c.position === pos) || null;
+      const card = teamCards.find((c: any) => c.position === pos && !used.has(c.id)) || null;
+      if (card) used.add(card.id);
       return {
         pos,
         stats:       card?.stats   ?? null,

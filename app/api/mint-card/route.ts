@@ -71,13 +71,11 @@ export async function POST(req: NextRequest) {
 
     const built = buildCard(profile);
     let { stats, ovr, tier, badges } = built;
-    // Cap GKs at 32 (one per team) — overflow → CB
-    let position = built.position;
-    if (position === "GK") {
-      const { count: gkCount } = await supabase
-        .from("cards").select("*", { count: "exact", head: true }).eq("position", "GK");
-      if ((gkCount ?? 0) >= 32) position = "CB";
-    }
+    // Mint-time position is just a "natural" suggestion based on the user's
+    // stat profile. It does NOT determine team slot — that's chosen by the
+    // user when joining a team via /api/join-team. Stored as null so it's
+    // clear the card hasn't claimed a slot yet.
+    let position: string | null = null;
     const { data: card, error: insertErr } = await supabase.from("cards").insert({
       x_handle: profile.x_handle,
       display_name: profile.display_name,
