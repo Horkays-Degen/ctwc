@@ -2386,6 +2386,362 @@ function TeamsListPage({ teams, myCard, onBack, onViewTeam, onClaim }) {
   );
 }
 
+// ─── ROUND REVEAL SEQUENCE ────────────────────────────────────
+// Fullscreen takeover that animates a round's matches one by one.
+// Each match: team intro → score count-up → winner glow → advance arrow.
+// After the last match, if isFinal, hands off to ChampionCelebration.
+const ROUND_NAMES_UI: Record<number, string> = {
+  1: "Round of 32", 2: "Round of 16", 3: "Quarter Finals",
+  4: "Semi Finals", 5: "Grand Final",
+};
+
+function RoundRevealSequence({ results, teams, round, isFinal, onDone }: {
+  results: any[]; teams: any[]; round: number; isFinal: boolean; onDone: () => void;
+}) {
+  const [idx, setIdx]         = useState(0);
+  const [phase, setPhase]     = useState<"intro" | "score" | "winner">("intro");
+  const [autoplay, setAutoplay] = useState(true);
+  const [showChamp, setShowChamp] = useState(false);
+
+  const cur = results[idx];
+  const homeTeam = teams.find(t => t.id === cur?.homeId);
+  const awayTeam = teams.find(t => t.id === cur?.awayId);
+  const winner   = teams.find(t => t.id === cur?.winnerId);
+  const isHome   = cur?.winnerId === cur?.homeId;
+
+  // Auto-advance through phases
+  useEffect(() => {
+    if (!cur || !autoplay) return;
+    const t1 = setTimeout(() => setPhase("score"),  1300);
+    const t2 = setTimeout(() => setPhase("winner"), 2700);
+    const t3 = setTimeout(() => {
+      if (idx < results.length - 1) {
+        setIdx(i => i + 1);
+        setPhase("intro");
+      } else if (isFinal) {
+        setShowChamp(true);
+      } else {
+        onDone();
+      }
+    }, 4200);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [idx, autoplay, cur, isFinal, onDone, results.length]);
+
+  // SFX hooks
+  useEffect(() => {
+    if (!cur) return;
+    if (phase === "intro")  { try { SFX.click();    } catch {} }
+    if (phase === "score")  { try { SFX.crowd("roar"); } catch {} }
+  }, [phase, idx, cur]);
+
+  if (!cur) { onDone(); return null; }
+
+  // Champion celebration takes over
+  if (showChamp) {
+    return <ChampionCelebration champion={winner} runnerUp={isHome ? awayTeam : homeTeam} onDone={onDone}/>;
+  }
+
+  const skip = () => {
+    if (idx < results.length - 1) { setIdx(i => i + 1); setPhase("intro"); }
+    else if (isFinal) setShowChamp(true);
+    else onDone();
+  };
+
+  return (
+    <div style={{
+      position:"fixed",inset:0,zIndex:300,
+      background:"radial-gradient(ellipse at 50% 50%, #0a1424 0%, #04060d 70%)",
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+      fontFamily:"'Segoe UI',system-ui,sans-serif",overflow:"hidden",
+    }}>
+      {/* Stadium glow */}
+      <div style={{position:"absolute",inset:0,
+        background:"radial-gradient(ellipse 70% 40% at 50% 50%, rgba(212,165,55,0.10) 0%, transparent 70%)",
+        pointerEvents:"none"}}/>
+
+      {/* Round label */}
+      <div style={{position:"absolute",top:32,left:"50%",transform:"translateX(-50%)",textAlign:"center"}}>
+        <div style={{fontSize:9,fontWeight:700,letterSpacing:5,color:"rgba(255,255,255,0.4)"}}>CTWC 2026</div>
+        <div style={{fontSize:18,fontWeight:900,color:"#FBBF24",letterSpacing:3,marginTop:4,
+          textShadow:"0 0 20px rgba(212,165,55,0.4)"}}>{ROUND_NAMES_UI[round] ?? `Round ${round}`}</div>
+        <div style={{fontSize:11,fontWeight:600,letterSpacing:2,color:"rgba(255,255,255,0.5)",marginTop:6}}>
+          Match {idx + 1} of {results.length}
+        </div>
+      </div>
+
+      {/* Skip / autoplay controls */}
+      <div style={{position:"absolute",top:32,right:32,display:"flex",gap:10,zIndex:5}}>
+        <button onClick={() => setAutoplay(a => !a)} style={{
+          padding:"7px 14px",fontSize:11,fontWeight:700,
+          background:autoplay?"rgba(34,197,94,0.15)":"rgba(255,255,255,0.05)",
+          border:`1px solid ${autoplay?"rgba(34,197,94,0.4)":"rgba(255,255,255,0.15)"}`,
+          color:autoplay?"#22C55E":"#fff",
+          borderRadius:7,cursor:"pointer",letterSpacing:0.5,
+        }}>{autoplay ? "● AUTO" : "○ AUTO"}</button>
+        <button onClick={skip} style={{
+          padding:"7px 14px",fontSize:11,fontWeight:700,
+          background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",
+          color:"#fff",borderRadius:7,cursor:"pointer",letterSpacing:0.5,
+        }}>SKIP →</button>
+        <button onClick={onDone} style={{
+          padding:"7px 14px",fontSize:11,fontWeight:700,
+          background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.35)",
+          color:"#F87171",borderRadius:7,cursor:"pointer",letterSpacing:0.5,
+        }}>EXIT ✕</button>
+      </div>
+
+      {/* Match showcase */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:50,position:"relative"}}>
+        {/* Home */}
+        <TeamReveal team={homeTeam} score={cur.homeScore} pens={cur.homePens}
+          isWinner={cur.winnerId === cur.homeId} phase={phase} side="left" key={`h-${idx}`}/>
+        {/* VS divider */}
+        <div style={{
+          fontSize:36,fontWeight:900,color:"rgba(255,255,255,0.18)",letterSpacing:8,
+          animation:"vsPulse 1.2s ease-in-out infinite",
+        }}>VS</div>
+        {/* Away */}
+        <TeamReveal team={awayTeam} score={cur.awayScore} pens={cur.awayPens}
+          isWinner={cur.winnerId === cur.awayId} phase={phase} side="right" key={`a-${idx}`}/>
+      </div>
+
+      {/* Bye banner */}
+      {cur.bye && (
+        <div style={{marginTop:32,fontSize:13,fontWeight:700,letterSpacing:2,
+          color:"rgba(255,255,255,0.4)"}}>BYE — Auto-advance</div>
+      )}
+
+      {/* Winner banner (phase=winner) */}
+      {phase === "winner" && winner && !cur.bye && (
+        <div style={{marginTop:36,
+          padding:"10px 28px",borderRadius:11,
+          background:`linear-gradient(135deg, ${winner.color}30, ${winner.color}10)`,
+          border:`2px solid ${winner.color}`,
+          boxShadow:`0 0 30px ${winner.color}66`,
+          animation:"badgeDrop 0.4s cubic-bezier(0.34,1.56,0.64,1) both",
+          display:"flex",alignItems:"center",gap:10,
+        }}>
+          <span style={{fontSize:20}}>{winner.emblem}</span>
+          <span style={{fontSize:13,fontWeight:900,letterSpacing:3,color:winner.color,
+            textShadow:`0 0 12px ${winner.color}88`}}>
+            {winner.name.toUpperCase()} ADVANCES
+          </span>
+        </div>
+      )}
+
+      {/* Match progress dots */}
+      <div style={{position:"absolute",bottom:42,display:"flex",gap:6}}>
+        {results.map((_, i) => (
+          <div key={i} style={{
+            width: i === idx ? 22 : 7, height:7, borderRadius:7,
+            background: i < idx ? "#22C55E" : i === idx ? "#FBBF24" : "rgba(255,255,255,0.15)",
+            transition:"all 0.3s",
+          }}/>
+        ))}
+      </div>
+
+      <style>{`
+        @keyframes vsPulse { 0%,100%{opacity:0.18;transform:scale(1)} 50%{opacity:0.45;transform:scale(1.06)} }
+        @keyframes teamSlideL { from{opacity:0;transform:translateX(-80px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes teamSlideR { from{opacity:0;transform:translateX(80px)}  to{opacity:1;transform:translateX(0)} }
+        @keyframes scoreCountBig { 0%{transform:scale(2);opacity:0} 50%{transform:scale(0.92);opacity:1} 100%{transform:scale(1);opacity:1} }
+        @keyframes winnerGlow { 0%,100%{box-shadow:0 0 30px var(--g),0 0 60px var(--g)} 50%{box-shadow:0 0 50px var(--g),0 0 100px var(--g)} }
+        @keyframes loserFade { from{opacity:1} to{opacity:0.35;filter:grayscale(0.7)} }
+      `}</style>
+    </div>
+  );
+}
+
+// Sub-component for one team in the reveal
+function TeamReveal({ team, score, pens, isWinner, phase, side }: any) {
+  if (!team) return <div style={{width:200}}/>;
+  const slideAnim = side === "left" ? "teamSlideL" : "teamSlideR";
+  const showScore = phase === "score" || phase === "winner";
+  const showWinner = phase === "winner";
+  const dimmed = showWinner && !isWinner;
+
+  return (
+    <div style={{
+      width:240,display:"flex",flexDirection:"column",alignItems:"center",gap:18,
+      animation:`${slideAnim} 0.55s cubic-bezier(0.22,1,0.36,1) both, ${dimmed ? "loserFade 0.5s 0.1s forwards" : ""}`,
+    }}>
+      {/* Crest disc */}
+      <div style={{
+        width:160,height:160,borderRadius:"50%",
+        background:`linear-gradient(135deg, ${team.color}, ${team.color}aa)`,
+        display:"flex",alignItems:"center",justifyContent:"center",
+        boxShadow: showWinner && isWinner
+          ? `0 0 50px ${team.color}, 0 0 100px ${team.color}88`
+          : `0 0 24px ${team.color}66`,
+        animation: showWinner && isWinner ? "winnerGlow 1.4s ease-in-out infinite" : "none",
+        // @ts-ignore — CSS var
+        "--g": `${team.color}aa`,
+        border:`3px solid ${showWinner && isWinner ? "#FBBF24" : team.color}`,
+        position:"relative",
+        transition:"all 0.4s",
+      }}>
+        {team.logoImg
+          ? <img src={team.logoImg} alt={team.name} style={{width:90,height:90,objectFit:"contain"}}/>
+          : <span style={{fontSize:72}}>{team.emblem}</span>
+        }
+        {showWinner && isWinner && (
+          <div style={{position:"absolute",top:-12,right:-12,fontSize:34,
+            animation:"badgeDrop 0.4s cubic-bezier(0.34,1.56,0.64,1) both"}}>👑</div>
+        )}
+      </div>
+
+      {/* Team name */}
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:18,fontWeight:900,color:"#fff",letterSpacing:1,
+          textShadow:`0 0 18px ${team.color}88`,maxWidth:230,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+          {team.name}
+        </div>
+      </div>
+
+      {/* Score (count-up) */}
+      <div style={{height:80,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        {showScore && (
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:84,fontWeight:900,lineHeight:1,
+              color: showWinner && isWinner ? "#FBBF24" : "#fff",
+              textShadow: showWinner && isWinner
+                ? "0 0 40px rgba(212,165,55,0.85), 0 0 16px #FBBF24"
+                : "0 4px 18px rgba(0,0,0,0.7)",
+              animation:"scoreCountBig 0.6s cubic-bezier(0.34,1.56,0.64,1) both",
+            }}>{score ?? 0}</div>
+            {pens !== undefined && pens !== null && (
+              <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.55)",letterSpacing:1.5,marginTop:4}}>
+                ({pens} pen)
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── CHAMPION CELEBRATION ─────────────────────────────────────
+// Tournament-winning takeover. Trophy, confetti explosion, banner.
+function ChampionCelebration({ champion, runnerUp, onDone }: any) {
+  const [stage, setStage] = useState<"build" | "explode" | "stay">("build");
+  const confetti = useRef(Array.from({ length: 90 }, (_, i) => ({
+    id: i,
+    color: [champion?.color ?? "#FBBF24", "#FBBF24", "#FFFFFF", "#FF6B6B", "#4ADE80"][i % 5],
+    dx: (Math.random() - 0.5) * 1100,
+    dy: -180 - Math.random() * 380,
+    rot: Math.random() * 720 - 360,
+    delay: Math.random() * 0.6,
+    size: 5 + Math.random() * 10,
+    shape: i % 3 === 0 ? "circle" : i % 3 === 1 ? "rect" : "star",
+  }))).current;
+
+  useEffect(() => {
+    try { SFX.crowd("roar"); } catch {}
+    const t1 = setTimeout(() => setStage("explode"), 600);
+    const t2 = setTimeout(() => setStage("stay"),    1100);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  return (
+    <div style={{
+      position:"fixed",inset:0,zIndex:400,
+      background:"radial-gradient(ellipse at 50% 50%, #1a0f00 0%, #04060d 75%)",
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+      fontFamily:"'Segoe UI',system-ui,sans-serif",overflow:"hidden",
+    }}>
+      {/* Radial gold glow */}
+      <div style={{position:"absolute",inset:0,
+        background:"radial-gradient(ellipse 60% 50% at 50% 45%, rgba(212,165,55,0.30) 0%, transparent 65%)",
+        animation:"orbFloat 5s ease-in-out infinite",pointerEvents:"none"}}/>
+
+      {/* Confetti */}
+      {stage !== "build" && confetti.map(p => (
+        <div key={p.id} style={{
+          position:"absolute",left:"50%",top:"50%",
+          width: p.shape === "rect" ? p.size * 1.8 : p.size, height: p.size,
+          background: p.color,
+          borderRadius: p.shape === "circle" ? "50%" : p.shape === "rect" ? "2px" : "0",
+          boxShadow: `0 0 ${p.size}px ${p.color}cc`,
+          animation: `confettiBurst 2s ${p.delay}s cubic-bezier(0.25,0.46,0.45,0.94) both`,
+          // @ts-ignore
+          "--dx": `${p.dx}px`, "--dy": `${p.dy}px`, "--rot": `${p.rot}deg`,
+          pointerEvents:"none",zIndex:2,
+        } as any}/>
+      ))}
+
+      {/* CTWC banner */}
+      <div style={{position:"relative",zIndex:5,textAlign:"center",
+        animation: stage !== "build" ? "fadeUp 0.8s cubic-bezier(0.22,1,0.36,1) both" : "none"}}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:9,color:"rgba(255,255,255,0.5)",marginBottom:14}}>
+          CTWC 2026
+        </div>
+        <div style={{fontSize:64,fontWeight:900,color:"#FBBF24",letterSpacing:6,
+          textShadow:"0 0 50px rgba(212,165,55,0.7), 0 0 14px #FBBF24",
+          marginBottom:36,
+        }}>
+          🏆 CHAMPIONS 🏆
+        </div>
+      </div>
+
+      {/* Champion crest */}
+      {champion && (
+        <div style={{position:"relative",zIndex:5,
+          animation: stage === "stay" ? "badgeDrop 0.7s 0.2s cubic-bezier(0.34,1.56,0.64,1) both" : "none",
+          opacity: stage === "build" ? 0 : 1,
+        }}>
+          <div style={{
+            width:240,height:240,borderRadius:"50%",
+            background:`radial-gradient(circle, ${champion.color}, ${champion.color}aa)`,
+            border:"6px solid #FBBF24",
+            boxShadow:"0 0 80px rgba(212,165,55,0.7), 0 0 160px rgba(212,165,55,0.4), inset 0 0 40px rgba(255,255,255,0.18)",
+            display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto",
+            animation:"winnerGlow 2.4s ease-in-out infinite",
+            // @ts-ignore
+            "--g": "rgba(212,165,55,0.7)",
+          }}>
+            {champion.logoImg
+              ? <img src={champion.logoImg} alt={champion.name} style={{width:140,height:140,objectFit:"contain"}}/>
+              : <span style={{fontSize:120}}>{champion.emblem}</span>
+            }
+          </div>
+        </div>
+      )}
+
+      {/* Champion name */}
+      {champion && (
+        <div style={{
+          marginTop:32,fontSize:36,fontWeight:900,color:"#fff",letterSpacing:3,
+          textShadow:`0 0 28px ${champion.color}aa`,position:"relative",zIndex:5,
+          animation: stage === "stay" ? "fadeUp 0.6s 0.5s cubic-bezier(0.22,1,0.36,1) both" : "none",
+          opacity: stage === "stay" ? 1 : 0,
+        }}>
+          {champion.name.toUpperCase()}
+        </div>
+      )}
+
+      {/* Runner-up note */}
+      {runnerUp && stage === "stay" && (
+        <div style={{marginTop:18,fontSize:12,color:"rgba(255,255,255,0.45)",letterSpacing:2,
+          animation:"fadeUp 0.5s 0.9s cubic-bezier(0.22,1,0.36,1) both",position:"relative",zIndex:5}}>
+          Defeated {runnerUp.name} in the final
+        </div>
+      )}
+
+      {/* Done button */}
+      <button onClick={onDone} style={{
+        position:"absolute",bottom:48,padding:"14px 36px",
+        fontSize:13,fontWeight:800,letterSpacing:3,
+        background:"linear-gradient(135deg, #FBBF24, #D4A537)",
+        border:"none",borderRadius:10,color:"#1a1a1a",cursor:"pointer",
+        boxShadow:"0 0 30px rgba(212,165,55,0.6)",zIndex:5,
+        animation: stage === "stay" ? "fadeUp 0.5s 1.4s cubic-bezier(0.22,1,0.36,1) both" : "none",
+        opacity: stage === "stay" ? 1 : 0,
+      }}>VIEW BRACKET →</button>
+    </div>
+  );
+}
+
 // ─── MATCH DETAIL MODAL ──────────────────────────────────────
 function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
   if (!match) return null;
@@ -3243,6 +3599,8 @@ export default function CTWCApp() {
   const [tournament,    setTournament]    = useState<any>(null);
   const [matchResults,  setMatchResults]  = useState<any[]>([]);
   const [adminLoading,  setAdminLoading]  = useState(false);
+  // Active round-reveal sequence (set after a successful simulate)
+  const [reveal, setReveal] = useState<{ results: any[]; round: number; isFinal: boolean } | null>(null);
 
   const supabase = createClient();
 
@@ -3448,6 +3806,14 @@ export default function CTWCApp() {
       const data = await res.json();
       if (!res.ok) return `Error: ${data.error ?? res.statusText}`;
       await loadTournament();
+      // Trigger the per-match reveal sequence with the freshly returned results
+      if (Array.isArray(data.results) && data.results.length > 0) {
+        setReveal({
+          results: data.results,
+          round:   data.round ?? 1,
+          isFinal: !!data.isFinal,
+        });
+      }
       return data.message ?? "Round simulated!";
     } catch (e) {
       return "Network error";
@@ -3529,6 +3895,17 @@ export default function CTWCApp() {
       {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
       {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} adminLoading={adminLoading}/>}
       {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
+
+      {/* Round reveal sequence — fires after admin simulates a round */}
+      {reveal && (
+        <RoundRevealSequence
+          results={reveal.results}
+          teams={teams}
+          round={reveal.round}
+          isFinal={reveal.isFinal}
+          onDone={() => { setReveal(null); setPage("bracket"); }}
+        />
+      )}
     </div>
   );
 }

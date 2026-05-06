@@ -101,7 +101,15 @@ export async function POST(req: NextRequest) {
           played_at:  new Date().toISOString(),
         })
         .eq("id", match.id);
-      results.push({ matchNum: match.match_num, bye: true, winnerId });
+      results.push({
+        matchNum: match.match_num,
+        homeId: match.home_id,
+        awayId: match.away_id,
+        homeScore: match.home_id ? 3 : 0,
+        awayScore: match.away_id ? 3 : 0,
+        winnerId,
+        bye: true,
+      });
       continue;
     }
 
@@ -135,12 +143,17 @@ export async function POST(req: NextRequest) {
     if (error) console.error("[simulate] update match error:", error);
 
     results.push({
-      matchNum:  match.match_num,
-      homeScore: result.homeScore,
-      awayScore: result.awayScore,
-      homePens:  result.homePens,
-      awayPens:  result.awayPens,
-      winnerId:  result.winnerId,
+      matchNum:     match.match_num,
+      homeId:       match.home_id,
+      awayId:       match.away_id,
+      homeScore:    result.homeScore,
+      awayScore:    result.awayScore,
+      homePens:     result.homePens,
+      awayPens:     result.awayPens,
+      winnerId:     result.winnerId,
+      events:       result.events,
+      homeStrength: result.homeStrength,
+      awayStrength: result.awayStrength,
     });
   }
 
@@ -155,7 +168,14 @@ export async function POST(req: NextRequest) {
       .update({ status: "complete", champion_id: finalMatch?.winnerId ?? null })
       .eq("id", tournament.id);
 
-    return NextResponse.json({ ok: true, results, message: "Tournament complete!", champion: finalMatch?.winnerId });
+    return NextResponse.json({
+      ok: true,
+      results,
+      round,
+      message: "Tournament complete!",
+      champion: finalMatch?.winnerId,
+      isFinal: true,
+    });
   }
 
   // Build next round match stubs from winners
@@ -198,7 +218,9 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     results,
+    round,
     nextRound,
+    isFinal: false,
     statsRefreshed: !!process.env.X_API_BEARER_TOKEN,
     message: `Round ${round} complete. Moving to round ${nextRound}.`,
   });
