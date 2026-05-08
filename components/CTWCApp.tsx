@@ -2074,7 +2074,7 @@ function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool
           padding:"6px 14px",borderRadius:20,
           background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.06)"}}>
           <span style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.45)"}}>vibecoded by</span>
-          <a href="https://x.com/okes" target="_blank" rel="noopener noreferrer"
+          <a href="https://x.com/horkays" target="_blank" rel="noopener noreferrer"
             onClick={(e)=>e.stopPropagation()}
             style={{
               display:"flex",alignItems:"center",gap:4,
@@ -2085,7 +2085,7 @@ function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool
             onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.color="#FBBF24"; (e.currentTarget as HTMLElement).style.textShadow="none"; }}
           >
             <span style={{fontSize:10}}>𝕏</span>
-            <span>@okes</span>
+            <span>@horkays</span>
           </a>
         </div>
       </div>
