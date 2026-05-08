@@ -35,8 +35,12 @@ export async function GET(req: NextRequest) {
   });
 
   if (!tokenRes.ok) {
-    console.error("[twitter/callback] token exchange failed:", tokenRes.status, await tokenRes.text());
-    return NextResponse.redirect(`${appUrl}?error=token_failed`);
+    const errBody = await tokenRes.text();
+    console.error("[twitter/callback] token exchange failed:", tokenRes.status, errBody);
+    // Encode short snippet of the actual error in the URL so we can debug
+    // without having to dig into Vercel logs.
+    const snippet = encodeURIComponent(errBody.slice(0, 120));
+    return NextResponse.redirect(`${appUrl}?error=token_failed&detail=${snippet}`);
   }
 
   const { access_token } = await tokenRes.json();
@@ -48,8 +52,10 @@ export async function GET(req: NextRequest) {
   );
 
   if (!userRes.ok) {
-    console.error("[twitter/callback] profile fetch failed:", userRes.status);
-    return NextResponse.redirect(`${appUrl}?error=profile_failed`);
+    const errBody = await userRes.text();
+    console.error("[twitter/callback] profile fetch failed:", userRes.status, errBody);
+    const snippet = encodeURIComponent(errBody.slice(0, 120));
+    return NextResponse.redirect(`${appUrl}?error=profile_failed&detail=${snippet}`);
   }
 
   const { data: u } = await userRes.json();
@@ -133,7 +139,8 @@ export async function GET(req: NextRequest) {
 
   if (insertErr || !newCard) {
     console.error("[twitter/callback] insert failed:", insertErr);
-    return NextResponse.redirect(`${appUrl}?error=mint_failed`);
+    const detail = encodeURIComponent((insertErr?.message ?? "no rows returned").slice(0, 120));
+    return NextResponse.redirect(`${appUrl}?error=mint_failed&detail=${detail}`);
   }
 
   return NextResponse.redirect(`${appUrl}?just_claimed=${handle}`);

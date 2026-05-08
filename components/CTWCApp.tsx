@@ -4314,13 +4314,17 @@ export default function CTWCApp() {
     if (oauthError) {
       const msgs: Record<string,string> = {
         oauth_failed:   "OAuth failed — please try again.",
-        token_failed:   "Could not get access token — please try again.",
-        profile_failed: "Could not fetch your X profile — please try again.",
+        token_failed:   "Could not get access token — please try again. (X_CLIENT_ID/SECRET may be wrong)",
+        profile_failed: "Could not fetch your X profile — please try again. (X API call rejected — check credits)",
         pool_full:      "The card pool is full (400/400). Registration is closed.",
         no_user:        "X user not found.",
-        mint_failed:    "Card minting failed — please try again.",
+        mint_failed:    "Card minting failed — please try again. (Database insert error)",
       };
-      setMintError(msgs[oauthError] ?? `Unknown error: ${oauthError}`);
+      const detail = params.get("detail");
+      const rawCode = `[ERROR: ${oauthError}]`;
+      const human = msgs[oauthError] ?? `Unknown error: ${oauthError}`;
+      const detailMsg = detail ? `\n\nDetails: ${decodeURIComponent(detail)}` : "";
+      setMintError(`${rawCode} ${human}${detailMsg}`);
       return;
     }
 
