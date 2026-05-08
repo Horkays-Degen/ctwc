@@ -1138,16 +1138,6 @@ function InteractiveCard({ card, size = "large", scale = 1 }: { card: any; size?
     }
   };
 
-  const handleShareX = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    // X doesn't allow direct image upload via URL params, so we open the
-    // tweet composer with prefilled text — user attaches the saved/copied PNG.
-    const text = encodeURIComponent(
-      `Just minted my @CTWC card 🔥\n\n${card.displayName} · ${card.tier.name} · OVR ${card.ovr}\n\n#CTWC2026 #CryptoTwitter`
-    );
-    window.open(`https://twitter.com/intent/tweet?text=${text}`, "_blank");
-  };
-
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -1270,11 +1260,11 @@ function InteractiveCard({ card, size = "large", scale = 1 }: { card: any; size?
         display:"flex",gap:10,
         zIndex:5,
       }}>
-        <button onClick={handleShareX} disabled={!!busy}
-          title="Share on X"
+        <button onClick={handleDownload} disabled={!!busy}
+          title="Download PNG"
           style={{
             display:"flex",alignItems:"center",gap:8,
-            padding:"10px 18px",fontSize:12,fontWeight:800,letterSpacing:0.5,
+            padding:"10px 22px",fontSize:12,fontWeight:800,letterSpacing:0.5,
             background:`linear-gradient(135deg, ${accent}, ${t?.border ?? accent})`,
             border:"none",borderRadius:9,color:"#0a0a0a",cursor:"pointer",
             boxShadow:`0 0 22px ${accent}88, 0 6px 20px rgba(0,0,0,0.5)`,
@@ -1283,25 +1273,8 @@ function InteractiveCard({ card, size = "large", scale = 1 }: { card: any; size?
           onMouseEnter={e=>(e.currentTarget.style.transform="scale(1.05)")}
           onMouseLeave={e=>(e.currentTarget.style.transform="scale(1)")}
         >
-          <span style={{fontSize:13,fontWeight:900}}>𝕏</span>
-          <span>Share on X</span>
-        </button>
-
-        <button onClick={handleDownload} disabled={!!busy}
-          title="Download PNG"
-          style={{
-            display:"flex",alignItems:"center",gap:7,
-            padding:"10px 16px",fontSize:12,fontWeight:700,
-            background:"rgba(255,255,255,0.06)",
-            border:`1px solid ${accent}55`,borderRadius:9,
-            color:"#fff",cursor:"pointer",backdropFilter:"blur(8px)",
-            transition:"all 0.15s",
-          }}
-          onMouseEnter={e=>{ e.currentTarget.style.background=`${accent}22`; }}
-          onMouseLeave={e=>{ e.currentTarget.style.background="rgba(255,255,255,0.06)"; }}
-        >
-          <span>{busy==="dl"?"…":"⬇"}</span>
-          <span>Download</span>
+          <span style={{fontSize:14}}>{busy==="dl"?"…":"⬇"}</span>
+          <span>Download Card</span>
         </button>
 
         <button onClick={handleCopy} disabled={!!busy}
@@ -2092,6 +2065,29 @@ function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool
             <span style={{fontSize:9,fontWeight:600,color:"rgba(255,255,255,0.32)",letterSpacing:1.5,textTransform:"uppercase"}}>{t.name}</span>
           </div>
         ))}
+      </div>
+
+      {/* ── Footer credit ── */}
+      <div style={{padding:"22px 28px 26px",textAlign:"center",position:"relative",zIndex:10,
+        borderTop:"1px solid rgba(255,255,255,0.04)"}}>
+        <div style={{display:"inline-flex",alignItems:"center",gap:6,
+          padding:"6px 14px",borderRadius:20,
+          background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.06)"}}>
+          <span style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.45)"}}>vibecoded by</span>
+          <a href="https://x.com/okes" target="_blank" rel="noopener noreferrer"
+            onClick={(e)=>e.stopPropagation()}
+            style={{
+              display:"flex",alignItems:"center",gap:4,
+              fontSize:11,fontWeight:800,color:"#FBBF24",textDecoration:"none",
+              transition:"all 0.18s",
+            }}
+            onMouseEnter={e=>{ (e.currentTarget as HTMLElement).style.color="#FDE68A"; (e.currentTarget as HTMLElement).style.textShadow="0 0 10px rgba(212,165,55,0.6)"; }}
+            onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.color="#FBBF24"; (e.currentTarget as HTMLElement).style.textShadow="none"; }}
+          >
+            <span style={{fontSize:10}}>𝕏</span>
+            <span>@okes</span>
+          </a>
+        </div>
       </div>
     </div>
   );
