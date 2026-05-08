@@ -4339,10 +4339,16 @@ export default function CTWCApp() {
     (async () => {
       try {
         const sb = createClient();
-        const { data } = await sb.from("cards").select("*").eq("x_handle", handle).single();
+        const { data, error: lookupErr } = await sb.from("cards").select("*").eq("x_handle", handle).single();
         if (!data) {
           try { localStorage.removeItem("ctwc_handle"); } catch {}
-          if (justClaimed) setMintError("Card minting failed — please try again.");
+          if (justClaimed) {
+            // DEBUG: card lookup after OAuth returned nothing.
+            // Could be: RLS blocking read, callback insert failed silently,
+            // or handle case mismatch. Show the supabase error if present.
+            const detail = lookupErr?.message ?? `lookup returned no row for handle '${handle}'`;
+            setMintError(`[LOOKUP FAILED] Card not found after mint.\n\nDetails: ${detail}`);
+          }
           return;
         }
         const card = transformCard(data);
