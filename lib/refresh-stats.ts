@@ -76,14 +76,49 @@ export async function refreshCardStats(cards: RawCard[]): Promise<RawCard[]> {
   }
 
   // ── Step 2: Per-user recent tweet metrics (last 10 tweets) ──────
-  // We need to fetch each user individually — no batch endpoint for timelines.
-  // For a round this is ≤ 22 players, totally fine on Basic tier.
+  // Cost optimization: instead of fetching tweets for ALL players in
+  // every round (352 calls in R32 = ~$18), we only fetch tweets for the
+  // top STARS_PER_TEAM players per team — the ones who actually drive the
+  // result based on position weighting in the match engine.
+  //
+  // Real football logic backs this: bench/lower-OVR players contribute
+  // marginally to the outcome. Refreshing only the stars saves ~55%
+  // of tweet API spend without changing the experience for users.
+  //
+  // The top players are selected by current OVR (highest first). Other
+  // players keep their existing tweet stats from the DB — they still
+  // benefit from the cheap profile-batch refresh in Step 1 (followers,
+  // listed_count, tweet_count update for everyone).
+  //
+  // Configurable via STARS_PER_TEAM env var (default: 5).
+  const STARS_PER_TEAM = parseInt(process.env.STARS_PER_TEAM ?? "5", 10);
+
+  // Group cards by team to pick the top stars per team
+  const cardsByTeam: Record<string, RawCard[]> = {};
+  for (const c of cards) {
+    const tid = c.team_id ?? "_unassigned";
+    if (!cardsByTeam[tid]) cardsByTeam[tid] = [];
+    cardsByTeam[tid].push(c);
+  }
+  const starIds = new Set<string>();
+  for (const teamCards of Object.values(cardsByTeam)) {
+    [...teamCards]
+      .sort((a, b) => (b.ovr ?? 60) - (a.ovr ?? 60))
+      .slice(0, STARS_PER_TEAM)
+      .forEach(c => starIds.add(c.id));
+  }
+  console.log(
+    `[refresh-stats] tweet refresh: ${starIds.size}/${cards.length} cards ` +
+    `(top ${STARS_PER_TEAM} per team)`
+  );
+
   const tweetMetrics: Record<string, {
     avg_likes: number; avg_retweets: number;
     avg_replies: number; avg_impressions: number;
   }> = {};
 
   await Promise.allSettled(cards.map(async (card) => {
+    if (!starIds.has(card.id)) return;            // skip non-star players
     const uid = twitterIdMap[card.x_handle];
     if (!uid) return;
 
