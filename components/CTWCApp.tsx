@@ -4339,15 +4339,22 @@ export default function CTWCApp() {
     (async () => {
       try {
         const sb = createClient();
-        const { data, error: lookupErr } = await sb.from("cards").select("*").eq("x_handle", handle).single();
+        // maybeSingle() returns null on 0 rows instead of throwing "Cannot coerce".
+        // We retry up to 4 times with backoff to absorb any replication lag
+        // between the server-side insert and the client read.
+        let data: any = null;
+        let lookupErr: any = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const res = await sb.from("cards").select("*").eq("x_handle", handle).maybeSingle();
+          if (res.data) { data = res.data; break; }
+          lookupErr = res.error;
+          if (attempt < 3) await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+        }
         if (!data) {
           try { localStorage.removeItem("ctwc_handle"); } catch {}
           if (justClaimed) {
-            // DEBUG: card lookup after OAuth returned nothing.
-            // Could be: RLS blocking read, callback insert failed silently,
-            // or handle case mismatch. Show the supabase error if present.
-            const detail = lookupErr?.message ?? `lookup returned no row for handle '${handle}'`;
-            setMintError(`[LOOKUP FAILED] Card not found after mint.\n\nDetails: ${detail}`);
+            const detail = lookupErr?.message ?? `no row found for handle '${handle}' after 4 retries`;
+            setMintError(`[LOOKUP FAILED] Card not found after mint.\n\nDetails: ${detail}\n\nTry clearing your browser cache: localStorage.clear()`);
           }
           return;
         }
