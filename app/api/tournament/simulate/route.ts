@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 
   const { data: rawCards } = await supabase
     .from("cards")
-    .select("id,x_handle,display_name,avatar_url,team_id,position,stats,ovr,tier,followers,following,listed_count,tweet_count,verified")
+    .select("id,x_handle,display_name,avatar_url,team_id,position,stats,ovr,bonus_ovr,tier,followers,following,listed_count,tweet_count,verified")
     .in("team_id", teamIds);
 
   // ── Refresh stats from live Twitter data before simulating ─────
@@ -77,10 +77,13 @@ export async function POST(req: NextRequest) {
     return SLOT_POSITIONS.map((pos) => {
       const card = teamCards.find((c: any) => c.position === pos && !used.has(c.id)) || null;
       if (card) used.add(card.id);
+      // bonus_ovr accumulates from prior round wins — passed through to
+      // the match engine which boosts team strength accordingly.
       return {
         pos,
         stats:       card?.stats   ?? null,
         ovr:         card?.ovr     ?? 60,
+        bonusOvr:    card?.bonus_ovr ?? 0,
         handle:      card?.x_handle     ?? "unknown",
         displayName: card?.display_name ?? "Unknown",
       };
@@ -146,6 +149,24 @@ export async function POST(req: NextRequest) {
       .eq("id", match.id);
 
     if (error) console.error("[simulate] update match error:", error);
+
+    // ── Award progression bonus to the winning team's cards ─────
+    // Schedule: R32 win → 0, R16 win → +3, QF win → +3, SF win → +3,
+    // Final win → +5. Cumulative across rounds.
+    const ROUND_BONUS: Record<number, number> = { 1: 0, 2: 3, 3: 3, 4: 3, 5: 5 };
+    const bonus = ROUND_BONUS[round] ?? 0;
+    if (bonus > 0 && result.winnerId) {
+      const { data: winnerCards } = await supabase
+        .from("cards").select("id, bonus_ovr").eq("team_id", result.winnerId);
+      if (winnerCards && winnerCards.length > 0) {
+        await Promise.allSettled(winnerCards.map(c =>
+          supabase.from("cards")
+            .update({ bonus_ovr: (c.bonus_ovr ?? 0) + bonus })
+            .eq("id", c.id)
+        ));
+        console.log(`[simulate] +${bonus} bonus_ovr awarded to ${winnerCards.length} cards on team ${result.winnerId}`);
+      }
+    }
 
     results.push({
       matchNum:     match.match_num,

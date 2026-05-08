@@ -11,6 +11,9 @@ export type PlayerSlot = {
   pos:    string;
   stats:  MatchStats | null;
   ovr:    number;
+  // bonusOvr accumulates as a team wins rounds: R16 win +3, QF +3, SF +3,
+  // Final +5 (cumulative). Boosts overall team strength when present.
+  bonusOvr?: number;
   handle: string;
   displayName: string;
 };
@@ -95,7 +98,7 @@ export function scoreTeam(slots: PlayerSlot[]): TeamStrength {
   const filled = slots.filter(s => s.stats !== null);
   if (filled.length === 0) return { attack: 55, defense: 55, ovr: 55, filled: 0 };
 
-  let atkSum = 0, defSum = 0, atkW = 0, defW = 0, ovrSum = 0;
+  let atkSum = 0, defSum = 0, atkW = 0, defW = 0, ovrSum = 0, bonusSum = 0;
 
   for (const p of filled) {
     const score = posScore(p.pos, p.stats!);
@@ -105,15 +108,25 @@ export function scoreTeam(slots: PlayerSlot[]): TeamStrength {
     atkW    += role.atk;
     defW    += role.def;
     ovrSum  += p.ovr;
+    bonusSum += (p.bonusOvr ?? 0);
   }
 
   const rawAtk = atkW > 0 ? atkSum / atkW : 60;
   const rawDef = defW > 0 ? defSum / defW : 60;
   const rawOvr = ovrSum / filled.length;
+  const avgBonus = bonusSum / filled.length;
 
   // Blend raw positional score with OVR (OVR is a calibrated composite)
-  const attack  = rawAtk * 0.60 + rawOvr * 0.40;
-  const defense = rawDef * 0.60 + rawOvr * 0.40;
+  let attack  = rawAtk * 0.60 + rawOvr * 0.40;
+  let defense = rawDef * 0.60 + rawOvr * 0.40;
+
+  // Tournament progression bonus: each +1 of avgBonus boosts strength
+  // by 1%. So a SF survivor (+9) plays ~9% stronger; champion-tier
+  // (+14 cumulative) plays ~14% stronger. Snowballs the underdog story
+  // — teams that go far get visibly tougher each round.
+  const bonusFactor = 1 + (avgBonus / 100);
+  attack  *= bonusFactor;
+  defense *= bonusFactor;
 
   // Penalty for incomplete squads (down to 70% at 0 players)
   const completeness = filled.length / 11;
@@ -122,7 +135,7 @@ export function scoreTeam(slots: PlayerSlot[]): TeamStrength {
   return {
     attack:  Math.round(attack  * penalty * 10) / 10,
     defense: Math.round(defense * penalty * 10) / 10,
-    ovr:     Math.round(rawOvr  * 10) / 10,
+    ovr:     Math.round((rawOvr + avgBonus) * 10) / 10,
     filled:  filled.length,
   };
 }

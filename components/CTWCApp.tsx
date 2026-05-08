@@ -24,6 +24,7 @@ function transformCard(row: any) {
     displayName: row.display_name || row.x_handle || 'CT Player',
     avatarUrl:   row.avatar_url || '',
     ovr:         row.ovr || 60,
+    bonusOvr:    row.bonus_ovr || 0,    // tournament progression bonus
     tier,
     stats:       row.stats || { ENG:60, INF:60, CLT:60, VOL:60, VRL:60, OVR:60 },
     badges:      row.badges || [],
@@ -708,9 +709,23 @@ function ShieldCard({ card, size="large", onClick = undefined }: { card: any; si
         {/* L7 · OVR + position (top-left, EA FC style) */}
         <div style={{position:"absolute",top:Math.round(12*s),left:Math.round(12*s),zIndex:10,
           textAlign:"center",lineHeight:1}}>
-          <div style={{fontSize:Math.round(46*s),fontWeight:900,color:"#fff",letterSpacing:-1,
-            textShadow:`0 2px ${Math.round(8*s)}px rgba(0,0,0,0.9),0 0 ${Math.round(18*s)}px ${t.glow}88`}}>
-            {card.ovr}
+          <div style={{display:"flex",alignItems:"flex-start",gap:Math.round(4*s)}}>
+            <div style={{fontSize:Math.round(46*s),fontWeight:900,color:"#fff",letterSpacing:-1,
+              textShadow:`0 2px ${Math.round(8*s)}px rgba(0,0,0,0.9),0 0 ${Math.round(18*s)}px ${t.glow}88`}}>
+              {card.ovr + (card.bonusOvr || 0)}
+            </div>
+            {/* Tournament progression bonus pip */}
+            {card.bonusOvr > 0 && (
+              <div style={{
+                fontSize:Math.round(10*s),fontWeight:900,
+                background:"linear-gradient(135deg,#FBBF24,#D4A537)",
+                color:"#1a1a1a",borderRadius:Math.round(4*s),
+                padding:`${Math.round(2*s)}px ${Math.round(4*s)}px`,
+                marginTop:Math.round(2*s),
+                boxShadow:`0 0 ${Math.round(8*s)}px rgba(212,165,55,0.7)`,
+                letterSpacing:0.3,
+              }}>+{card.bonusOvr}</div>
+            )}
           </div>
           <div style={{fontSize:Math.round(11*s),fontWeight:900,color:t.accent,letterSpacing:1.5,
             marginTop:Math.round(2*s),textShadow:`0 0 ${Math.round(6*s)}px ${t.glow}`}}>
