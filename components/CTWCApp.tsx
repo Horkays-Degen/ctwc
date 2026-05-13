@@ -2655,6 +2655,216 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
   );
 }
 
+// ─── TOURNAMENT STATS PAGE ────────────────────────────────────
+// Aggregates events across all played matches: top scorers, assists,
+// MOTM awards, cards, GK saves. The "sports broadcast" stat sheet
+// users actually want to see after rounds simulate.
+const TS_TABS = [
+  { k: "scorers",  label: "Top Scorers",   icon: "⚽" },
+  { k: "assists",  label: "Assists",       icon: "🅰" },
+  { k: "motm",     label: "MOTM Awards",   icon: "⭐" },
+  { k: "saves",    label: "Top Saves",     icon: "🧤" },
+  { k: "yellows",  label: "Bookings",      icon: "🟨" },
+  { k: "reds",     label: "Sent Off",      icon: "🟥" },
+];
+
+function TournamentStatsPage({ matches, teams, pool, myCard, onBack }: any) {
+  const [tab, setTab] = useState("scorers");
+
+  const cardByHandle = useMemo(() => {
+    const m: Record<string, any> = {};
+    pool.forEach((c: any) => { m[c.handle] = c; });
+    return m;
+  }, [pool]);
+  const teamById = useMemo(() => {
+    const m: Record<string, any> = {};
+    teams.forEach((t: any) => { m[t.id] = t; });
+    return m;
+  }, [teams]);
+
+  // Aggregate stats across all completed matches
+  const playerStats = useMemo(() => {
+    type S = {
+      handle: string; name: string; teamId: string;
+      goals: number; assists: number; motms: number;
+      saves: number; yellows: number; reds: number;
+    };
+    const out: Record<string, S> = {};
+    const bump = (handle: string, name: string, teamId: string, field: keyof Omit<S, "handle"|"name"|"teamId">, n: number = 1) => {
+      if (!out[handle]) {
+        out[handle] = { handle, name, teamId, goals:0, assists:0, motms:0, saves:0, yellows:0, reds:0 };
+      }
+      (out[handle] as any)[field] += n;
+    };
+
+    for (const m of matches ?? []) {
+      if (m.status !== "complete") continue;
+      const d = m.match_data ?? {};
+      const events: any[] = d.events ?? [];
+      for (const e of events) {
+        const teamId = e.team === "home" ? m.home_id : m.away_id;
+        const evType = e.type ?? "goal";
+        if (evType === "goal") {
+          bump(e.scorer, e.scorerName, teamId, "goals");
+          if (e.assist) bump(e.assist, e.assistName ?? e.assist, teamId, "assists");
+        } else if (evType === "yellow") bump(e.scorer, e.scorerName, teamId, "yellows");
+        else if (evType === "red")     bump(e.scorer, e.scorerName, teamId, "reds");
+      }
+      // MOTM
+      if (d.motm) {
+        const teamId = d.motm.team === "home" ? m.home_id : m.away_id;
+        bump(d.motm.handle, d.motm.displayName, teamId, "motms");
+      }
+      // Saves — attribute to GKs of each team
+      const homeGkSaves = d.homeStats?.saves ?? 0;
+      const awayGkSaves = d.awayStats?.saves ?? 0;
+      // We don't know the GK handle from match_data, so we'll skip for now
+      // unless we have access. Instead, we track team-level saves separately
+      // below if needed. Actually let's just look at the team's GK from the pool.
+      const findGK = (teamId: string) => pool.find((c: any) => c.teamId === teamId && c.position?.code === "GK");
+      const hgk = findGK(m.home_id);
+      const agk = findGK(m.away_id);
+      if (hgk && homeGkSaves > 0) bump(hgk.handle, hgk.displayName, m.home_id, "saves", homeGkSaves);
+      if (agk && awayGkSaves > 0) bump(agk.handle, agk.displayName, m.away_id, "saves", awayGkSaves);
+    }
+    return Object.values(out);
+  }, [matches, pool]);
+
+  // Sort by current tab
+  const sorted = useMemo(() => {
+    const field = ({
+      scorers: "goals", assists: "assists", motm: "motms",
+      saves: "saves", yellows: "yellows", reds: "reds",
+    } as Record<string, keyof typeof playerStats[0]>)[tab];
+    return [...playerStats]
+      .filter(s => (s[field as keyof typeof s] as number) > 0)
+      .sort((a, b) => (b[field as keyof typeof b] as number) - (a[field as keyof typeof a] as number))
+      .slice(0, 30);
+  }, [playerStats, tab]);
+
+  const totalGoals  = playerStats.reduce((s, p) => s + p.goals, 0);
+  const totalAssists = playerStats.reduce((s, p) => s + p.assists, 0);
+  const matchesPlayed = (matches ?? []).filter((m: any) => m.status === "complete").length;
+
+  return (
+    <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+      <Nav onHome={onBack}/>
+
+      {/* Header */}
+      <div style={{
+        background:"linear-gradient(180deg, rgba(212,165,55,0.08), transparent)",
+        borderBottom:"1px solid rgba(255,255,255,0.05)",
+        padding:"28px 24px 22px",textAlign:"center",
+      }}>
+        <div style={{fontSize:11,fontWeight:700,letterSpacing:5,color:"rgba(255,255,255,0.4)",marginBottom:6}}>CTWC 2026</div>
+        <div style={{fontSize:32,fontWeight:900,color:"#FBBF24",letterSpacing:2,
+          textShadow:"0 0 24px rgba(212,165,55,0.5)"}}>📊 Tournament Stats</div>
+        <div style={{display:"flex",justifyContent:"center",gap:24,marginTop:14,flexWrap:"wrap"}}>
+          <div><span style={{fontSize:22,fontWeight:900,color:"#fff"}}>{matchesPlayed}</span> <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:1.5,textTransform:"uppercase"}}>matches</span></div>
+          <div><span style={{fontSize:22,fontWeight:900,color:"#fff"}}>{totalGoals}</span> <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:1.5,textTransform:"uppercase"}}>goals</span></div>
+          <div><span style={{fontSize:22,fontWeight:900,color:"#fff"}}>{totalAssists}</span> <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:1.5,textTransform:"uppercase"}}>assists</span></div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{padding:"16px 24px",display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",
+        borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+        {TS_TABS.map(t => (
+          <button key={t.k} onClick={()=>setTab(t.k)} style={{
+            display:"flex",alignItems:"center",gap:7,
+            padding:"8px 16px",fontSize:11,fontWeight:700,letterSpacing:0.5,
+            background: tab === t.k ? "rgba(212,165,55,0.18)" : "transparent",
+            border: `1px solid ${tab === t.k ? "rgba(212,165,55,0.5)" : "rgba(255,255,255,0.08)"}`,
+            color: tab === t.k ? "#FBBF24" : "rgba(255,255,255,0.55)",
+            borderRadius:18,cursor:"pointer",
+            boxShadow: tab === t.k ? "0 0 14px rgba(212,165,55,0.25)" : "none",
+            transition:"all 0.18s",
+          }}>
+            <span>{t.icon}</span><span>{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      <div style={{maxWidth:760,margin:"0 auto",padding:"22px 18px 40px"}}>
+        {sorted.length === 0 ? (
+          <div style={{textAlign:"center",padding:60,color:"rgba(255,255,255,0.3)"}}>
+            <div style={{fontSize:42,marginBottom:10}}>📭</div>
+            <div style={{fontSize:13}}>No data yet — wait for matches to be played</div>
+          </div>
+        ) : sorted.map((p, i) => {
+          const card = cardByHandle[p.handle];
+          const team = teamById[p.teamId];
+          const isMe = myCard?.handle === p.handle;
+          const value = (p as any)[
+            tab === "scorers" ? "goals" : tab === "assists" ? "assists" :
+            tab === "motm" ? "motms" : tab === "saves" ? "saves" :
+            tab === "yellows" ? "yellows" : "reds"
+          ];
+          const rank = i + 1;
+          const podiumColor = rank === 1 ? "#FBBF24" : rank === 2 ? "#C0C0C0" : rank === 3 ? "#CD7F32" : null;
+          return (
+            <div key={p.handle} style={{
+              display:"flex",alignItems:"center",gap:14,
+              padding:"11px 16px",marginBottom:6,borderRadius:11,
+              background: isMe
+                ? "linear-gradient(90deg, rgba(212,165,55,0.18), rgba(212,165,55,0.06))"
+                : "rgba(255,255,255,0.02)",
+              border: isMe ? "1px solid rgba(212,165,55,0.55)" : "1px solid rgba(255,255,255,0.06)",
+            }}>
+              <div style={{
+                width:38,textAlign:"center",fontSize:rank<=3?20:14,fontWeight:900,
+                color: podiumColor ?? "rgba(255,255,255,0.5)",
+                textShadow: podiumColor ? `0 0 12px ${podiumColor}88` : "none",
+                flexShrink:0,
+              }}>
+                {rank <= 3 ? (rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉") : `#${rank}`}
+              </div>
+              <div style={{
+                width:40,height:40,borderRadius:9,overflow:"hidden",flexShrink:0,
+                background: aColor(p.name),
+                border: card ? `1.5px solid ${card.tier.border}66` : "1px solid rgba(255,255,255,0.1)",
+              }}>
+                {card?.avatarUrl
+                  ? <img src={proxyAvatar(card.avatarUrl)} alt={p.name} crossOrigin="anonymous"
+                      style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 8%"}}/>
+                  : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:12,fontWeight:800,color:"#fff"}}>{inits(p.name)}</div>
+                }
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:800,color:"#fff",
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {p.name}{isMe && <span style={{fontSize:9,fontWeight:800,color:"#FBBF24",letterSpacing:1.5,marginLeft:6}}>YOU</span>}
+                </div>
+                <div style={{display:"flex",gap:6,alignItems:"center",marginTop:1}}>
+                  <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"monospace"}}>@{p.handle}</span>
+                  {team && (
+                    <>
+                      <span style={{fontSize:9,color:"rgba(255,255,255,0.2)"}}>·</span>
+                      <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:team.color,fontWeight:700}}>
+                        <EmblemImg team={team} size={11}/>
+                        <span style={{maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team.name}</span>
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0,minWidth:56}}>
+                <div style={{fontSize:24,fontWeight:900,color:"#FBBF24",lineHeight:1,
+                  textShadow:"0 0 10px rgba(212,165,55,0.5)"}}>{value}</div>
+                <div style={{fontSize:8,fontWeight:700,letterSpacing:1.5,color:"rgba(255,255,255,0.35)",marginTop:2,textTransform:"uppercase"}}>
+                  {TS_TABS.find(t=>t.k===tab)?.label}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── LEADERBOARD ──────────────────────────────────────────────
 // Top 50 cards across multiple metrics. Live — refreshes whenever the
 // pool re-syncs (which happens after every stat refresh).
@@ -3550,20 +3760,119 @@ function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
           </div>
         )}
 
-        {/* ── Goal events list ── */}
+        {/* ── Player of the Match (MOTM) ── */}
+        {data.motm && (
+          <div style={{padding:"0 24px 18px"}}>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>⭐ Player of the Match</div>
+            <div style={{
+              padding:"14px 16px",borderRadius:11,
+              background:`linear-gradient(135deg, ${data.motm.team === "home" ? hColor : aColor}1a, rgba(212,165,55,0.12))`,
+              border:`1.5px solid ${data.motm.team === "home" ? hColor : aColor}88`,
+              display:"flex",alignItems:"center",gap:13,
+              boxShadow:`0 0 18px ${data.motm.team === "home" ? hColor : aColor}33`,
+            }}>
+              <div style={{
+                width:50,height:50,borderRadius:11,
+                background:`linear-gradient(135deg,#FBBF24,#D4A537)`,
+                color:"#1a1a1a",display:"flex",flexDirection:"column",
+                alignItems:"center",justifyContent:"center",flexShrink:0,
+                fontWeight:900,
+                boxShadow:"0 0 12px rgba(212,165,55,0.6)",
+              }}>
+                <div style={{fontSize:22,lineHeight:1}}>{data.motm.rating.toFixed(1)}</div>
+                <div style={{fontSize:7,letterSpacing:1.2,marginTop:1}}>RATING</div>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:900,color:"#fff",
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {data.motm.displayName}
+                </div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:"monospace",marginTop:1}}>
+                  @{data.motm.handle}
+                </div>
+                <div style={{
+                  display:"inline-block",marginTop:6,fontSize:10,fontWeight:700,
+                  padding:"3px 9px",borderRadius:5,
+                  background:`${data.motm.team === "home" ? hColor : aColor}33`,
+                  border:`1px solid ${data.motm.team === "home" ? hColor : aColor}66`,
+                  color:data.motm.team === "home" ? hColor : aColor,
+                  letterSpacing:1,textTransform:"uppercase",
+                }}>{data.motm.reason}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Match stat grid ── */}
+        {data.homeStats && data.awayStats && (
+          <div style={{padding:"0 24px 22px"}}>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Match Stats</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {([
+                ["Possession",      data.homeStats.possession,   data.awayStats.possession,   true, "%"],
+                ["Shots",           data.homeStats.shots,        data.awayStats.shots,        false, ""],
+                ["Shots on Target", data.homeStats.shotsOnTarget,data.awayStats.shotsOnTarget,false, ""],
+                ["Saves",           data.homeStats.saves,        data.awayStats.saves,        false, ""],
+                ["Pass Accuracy",   data.homeStats.passAccuracy, data.awayStats.passAccuracy, true, "%"],
+                ["Yellow Cards",    data.homeStats.yellowCards,  data.awayStats.yellowCards,  false, ""],
+                ["Red Cards",       data.homeStats.redCards,     data.awayStats.redCards,     false, ""],
+              ] as [string, number, number, boolean, string][]).filter(([_l,h,a]) => h + a > 0).map(([label, hv, av, asBar, suf]) => {
+                const total = (hv as number) + (av as number);
+                const hPct = asBar ? (hv as number) : (total > 0 ? ((hv as number) / total) * 100 : 50);
+                return (
+                  <div key={label}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                      <span style={{fontSize:13,fontWeight:800,color:hColor}}>{hv}{suf}</span>
+                      <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:0.5}}>{label}</span>
+                      <span style={{fontSize:13,fontWeight:800,color:aColor}}>{av}{suf}</span>
+                    </div>
+                    <div style={{height:5,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden",display:"flex"}}>
+                      <div style={{width:`${hPct}%`,background:`linear-gradient(90deg,${hColor}aa,${hColor})`,transition:"width 0.8s ease"}}/>
+                      <div style={{flex:1,background:`linear-gradient(90deg,${aColor},${aColor}aa)`}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Match events feed (goals, cards) ── */}
         {events.length > 0 && (
           <div style={{padding:"0 24px 24px"}}>
-            <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Goals</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Match Events</div>
             <div style={{display:"flex",flexDirection:"column",gap:5}}>
               {events.map((e:any,i:number)=>{
                 const isHome = e.team === "home";
                 const col    = isHome ? hColor : aColor;
+                const evType = e.type ?? "goal";
+                const icon = evType === "goal" ? "⚽" : evType === "yellow" ? "🟨" : evType === "red" ? "🟥" : "🥅";
                 return (
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 13px",borderRadius:9,background:`${col}0a`,border:`1px solid ${col}22`}}>
-                    <div style={{width:28,height:28,borderRadius:"50%",background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0,boxShadow:`0 0 8px ${col}66`}}>⚽</div>
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 13px",borderRadius:9,
+                    background:`${col}0a`,border:`1px solid ${col}22`}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",
+                      background: evType === "goal" ? col : "rgba(0,0,0,0.4)",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:13,flexShrink:0,
+                      boxShadow: evType === "goal" ? `0 0 8px ${col}66` : "none"}}>{icon}</div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:800,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.scorerName}</div>
-                      <div style={{fontSize:10,color:col,fontWeight:600}}>{isHome?homeTeam?.name:awayTeam?.name}</div>
+                      <div style={{fontSize:12,fontWeight:800,color:"#fff",
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {e.scorerName}
+                        {evType === "red" && <span style={{color:"#EF4444",marginLeft:5,fontSize:10}}>SENT OFF</span>}
+                        {evType === "yellow" && <span style={{color:"#FBBF24",marginLeft:5,fontSize:10}}>BOOKED</span>}
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,color:col,fontWeight:600}}>
+                        <span>{isHome?homeTeam?.name:awayTeam?.name}</span>
+                        {e.assistName && evType === "goal" && (
+                          <>
+                            <span style={{color:"rgba(255,255,255,0.25)"}}>·</span>
+                            <span style={{color:"rgba(255,255,255,0.5)"}}>
+                              🅰 assist: {e.assistName}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div style={{fontSize:13,fontWeight:900,color:"rgba(255,255,255,0.45)",flexShrink:0}}>{e.minute}'</div>
                   </div>
@@ -3658,7 +3967,7 @@ function AdminPanel({ tournament, onSeed, onSimulate, onDeadline, loading }: any
 }
 
 // ─── TOURNAMENT PAGE — overview + current round ───────────────
-function TournamentPage({ teams, onBack, onBrowse, onBracket, tournament, matches, onAdminSeed, onAdminSimulate, onAdminDeadline, adminLoading }: any) {
+function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, tournament, matches, onAdminSeed, onAdminSimulate, onAdminDeadline, adminLoading }: any) {
   const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const totalFilled = teams.reduce((s,t)=>s+t.memberIds.length,0);
   const totalSlots  = teams.length * 11;
@@ -3735,6 +4044,9 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, tournament, matche
           )}
           <button onClick={onBracket} style={{padding:"11px 28px",fontSize:13,fontWeight:700,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:10,color:"#fff",cursor:"pointer"}}>
             🗺️ View Full Bracket
+          </button>
+          <button onClick={onStats} style={{padding:"11px 28px",fontSize:13,fontWeight:700,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:10,color:"#fff",cursor:"pointer"}}>
+            📊 Tournament Stats
           </button>
         </div>
       </div>
@@ -4651,6 +4963,7 @@ export default function CTWCApp() {
 
       {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} onLeaderboard={()=>setPage("leaderboard")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} tournament={tournament} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
       {page==="leaderboard" && <LeaderboardPage pool={pool} teams={teams} myCard={pending} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
+      {page==="tourneyStats" && <TournamentStatsPage matches={matchResults} teams={teams} pool={pool} myCard={pending} onBack={()=>setPage("tournament")}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
       {page==="revealReady" && pending && (
         <RevealReadyGate card={pending} onOpen={() => {
@@ -4675,7 +4988,7 @@ export default function CTWCApp() {
       {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
       {page==="pool"        && <PlayerPool pool={pool} myCard={pending} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
-      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}
+      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} onStats={()=>setPage("tourneyStats")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}
       {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
 
       {/* Live in-app notifications (e.g. user's team match results) */}

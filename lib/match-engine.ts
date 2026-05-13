@@ -28,11 +28,48 @@ export type TeamStrength = {
 export type GoalEvent = {
   minute:  number;
   team:    "home" | "away";
-  scorer:  string;   // @handle
+  type:    "goal" | "yellow" | "red" | "save_miss"; // save_miss = big chance, GK saved it
+  scorer:  string;   // @handle of the scorer / fouler / shooter
   scorerName: string;
+  // Goals only: which teammate set it up
+  assist?:     string;
+  assistName?: string;
+};
+
+export type TeamMatchStats = {
+  shots:           number;
+  shotsOnTarget:   number;
+  possession:      number;  // 0–100
+  saves:           number;  // by GK
+  yellowCards:     number;
+  redCards:        number;
+  passAccuracy:    number;  // 0–100
+};
+
+export type PlayerOfMatch = {
+  handle:      string;
+  displayName: string;
+  team:        "home" | "away";
+  rating:      number;       // 1–10
+  reason:      string;       // why they're MOTM
 };
 
 export type MatchResult = {
+  homeScore:    number;
+  awayScore:    number;
+  homePens:     number | null;
+  awayPens:     number | null;
+  winnerId:     string;
+  events:       GoalEvent[];
+  homeStrength: TeamStrength;
+  awayStrength: TeamStrength;
+  homeStats:    TeamMatchStats;
+  awayStats:    TeamMatchStats;
+  motm:         PlayerOfMatch | null;
+};
+
+// Legacy type kept for backwards compat — the new MatchResult above is canonical
+export type _MatchResultLegacy = {
   homeScore: number;
   awayScore: number;
   homePens:  number | null;  // penalty shootout, null if not needed
@@ -217,17 +254,103 @@ export function simulateMatch(
   const homeScorers = pickScorers(homeSlots, homeGoals, rand);
   const awayScorers = pickScorers(awaySlots, awayGoals, rand);
 
+  // ── Assist picker: pick a teammate of the scorer for the assist ─
+  // Assists weighted toward CAM > LW/RW > CM > everywhere else.
+  const ASSIST_WEIGHT: Record<string, number> = {
+    CAM: 3.0, LW: 2.5, RW: 2.5, CM: 2.0, CDM: 1.0, ST: 1.5,
+    LB: 1.0, RB: 1.0, CB: 0.3, GK: 0.0,
+  };
+  const pickAssist = (slots: PlayerSlot[], scorerHandle: string) => {
+    if (rand() < 0.18) return null;   // ~18% of goals are unassisted
+    const pool = slots.filter(s => s.stats && s.handle !== scorerHandle);
+    if (pool.length === 0) return null;
+    const w  = pool.map(s => ASSIST_WEIGHT[s.pos] ?? 1.0);
+    const tot = w.reduce((a, b) => a + b, 0);
+    let pick = rand() * tot;
+    for (let i = 0; i < pool.length; i++) {
+      pick -= w[i];
+      if (pick <= 0) return { handle: pool[i].handle, name: pool[i].displayName };
+    }
+    return { handle: pool[0].handle, name: pool[0].displayName };
+  };
+
+  // ── Card events (yellows + reds) ─────────────────────────────
+  // Cards bias toward defenders/CDMs (they tackle more)
+  const CARD_WEIGHT: Record<string, number> = {
+    CB: 2.5, CDM: 2.0, LB: 1.5, RB: 1.5, CM: 1.3, ST: 1.0,
+    LW: 0.8, RW: 0.8, CAM: 0.7, GK: 0.3,
+  };
+  const pickCardTaker = (slots: PlayerSlot[]) => {
+    const pool = slots.filter(s => s.stats);
+    if (pool.length === 0) return null;
+    const w = pool.map(s => CARD_WEIGHT[s.pos] ?? 1.0);
+    const tot = w.reduce((a, b) => a + b, 0);
+    let pick = rand() * tot;
+    for (let i = 0; i < pool.length; i++) {
+      pick -= w[i];
+      if (pick <= 0) return { handle: pool[i].handle, name: pool[i].displayName };
+    }
+    return { handle: pool[0].handle, name: pool[0].displayName };
+  };
+
+  // Yellow card distribution: avg 2.5 per team per match
+  const homeYellows = Math.min(poisson(2.5, rand), 6);
+  const awayYellows = Math.min(poisson(2.5, rand), 6);
+  // Red cards are rare — ~8% chance per team per match
+  const homeReds = rand() < 0.08 ? 1 : 0;
+  const awayReds = rand() < 0.08 ? 1 : 0;
+
+  const makeCardEvents = (
+    slots: PlayerSlot[],
+    yellows: number, reds: number,
+    team: "home" | "away"
+  ): GoalEvent[] => {
+    const out: GoalEvent[] = [];
+    for (let i = 0; i < yellows; i++) {
+      const p = pickCardTaker(slots);
+      if (!p) continue;
+      out.push({
+        minute: 5 + Math.floor(rand() * 85),
+        team, type: "yellow",
+        scorer: p.handle, scorerName: p.name,
+      });
+    }
+    for (let i = 0; i < reds; i++) {
+      const p = pickCardTaker(slots);
+      if (!p) continue;
+      out.push({
+        minute: 30 + Math.floor(rand() * 60),
+        team, type: "red",
+        scorer: p.handle, scorerName: p.name,
+      });
+    }
+    return out;
+  };
+
+  const homeCardEvents = makeCardEvents(homeSlots, homeYellows, homeReds, "home");
+  const awayCardEvents = makeCardEvents(awaySlots, awayYellows, awayReds, "away");
+
   const events: GoalEvent[] = [
-    ...homeMinutes.map((m, i) => ({
-      minute: m, team: "home" as const,
-      scorer: homeScorers[i]?.handle ?? "unknown",
-      scorerName: homeScorers[i]?.displayName ?? "Unknown",
-    })),
-    ...awayMinutes.map((m, i) => ({
-      minute: m, team: "away" as const,
-      scorer: awayScorers[i]?.handle ?? "unknown",
-      scorerName: awayScorers[i]?.displayName ?? "Unknown",
-    })),
+    ...homeMinutes.map((m, i) => {
+      const a = pickAssist(homeSlots, homeScorers[i]?.handle ?? "");
+      return {
+        minute: m, team: "home" as const, type: "goal" as const,
+        scorer:     homeScorers[i]?.handle      ?? "unknown",
+        scorerName: homeScorers[i]?.displayName ?? "Unknown",
+        ...(a ? { assist: a.handle, assistName: a.name } : {}),
+      };
+    }),
+    ...awayMinutes.map((m, i) => {
+      const a = pickAssist(awaySlots, awayScorers[i]?.handle ?? "");
+      return {
+        minute: m, team: "away" as const, type: "goal" as const,
+        scorer:     awayScorers[i]?.handle      ?? "unknown",
+        scorerName: awayScorers[i]?.displayName ?? "Unknown",
+        ...(a ? { assist: a.handle, assistName: a.name } : {}),
+      };
+    }),
+    ...homeCardEvents,
+    ...awayCardEvents,
   ].sort((a, b) => a.minute - b.minute);
 
   // Penalty shootout on draw
@@ -259,6 +382,98 @@ export function simulateMatch(
     winnerId = homeGoals > awayGoals ? homeId : awayId;
   }
 
+  // ── Team match stats (shots, possession, pass acc, saves) ────
+  // Shots: ~10–18 per team, scales with attack strength
+  const shotBase = 10;
+  const homeShots = Math.round(shotBase + (homeStr.attack - 60) / 6 + rand() * 5);
+  const awayShots = Math.round(shotBase + (awayStr.attack - 60) / 6 + rand() * 5);
+
+  // On-target rate: 35–55%
+  const homeOnTarget = Math.max(homeGoals,
+    Math.round(homeShots * (0.35 + rand() * 0.2)));
+  const awayOnTarget = Math.max(awayGoals,
+    Math.round(awayShots * (0.35 + rand() * 0.2)));
+
+  // Possession: midfield strength dominates. Sums to 100.
+  const midFactor = (slots: PlayerSlot[]) =>
+    slots.filter(s => ["CM", "CDM", "CAM"].includes(s.pos))
+         .reduce((sum, s) => sum + (s.ovr ?? 60), 0);
+  const homeMid = midFactor(homeSlots);
+  const awayMid = midFactor(awaySlots);
+  const totalMid = homeMid + awayMid || 1;
+  // Add small randomization (±5%)
+  let homePoss = Math.round((homeMid / totalMid) * 100 + (rand() - 0.5) * 10);
+  homePoss = Math.max(30, Math.min(70, homePoss));
+  const awayPoss = 100 - homePoss;
+
+  // Saves by GK = on-target shots that didn't score
+  const homeSaves = Math.max(0, awayOnTarget - awayGoals);
+  const awaySaves = Math.max(0, homeOnTarget - homeGoals);
+
+  // Pass accuracy: scales with OVR
+  const homePassAcc = Math.round(70 + (homeStr.ovr - 60) / 3 + rand() * 5);
+  const awayPassAcc = Math.round(70 + (awayStr.ovr - 60) / 3 + rand() * 5);
+
+  const homeStats: TeamMatchStats = {
+    shots:         homeShots,
+    shotsOnTarget: homeOnTarget,
+    possession:    homePoss,
+    saves:         homeSaves,
+    yellowCards:   homeYellows,
+    redCards:      homeReds,
+    passAccuracy:  Math.min(95, homePassAcc),
+  };
+  const awayStats: TeamMatchStats = {
+    shots:         awayShots,
+    shotsOnTarget: awayOnTarget,
+    possession:    awayPoss,
+    saves:         awaySaves,
+    yellowCards:   awayYellows,
+    redCards:      awayReds,
+    passAccuracy:  Math.min(95, awayPassAcc),
+  };
+
+  // ── Player of the match ──────────────────────────────────────
+  // Score each player by their contribution. Highest wins.
+  type Tally = { handle: string; name: string; team: "home" | "away"; score: number; reason: string };
+  const tally: Record<string, Tally> = {};
+  const bump = (h: string, n: string, t: "home" | "away", score: number, reason: string) => {
+    if (!tally[h]) tally[h] = { handle: h, name: n, team: t, score: 0, reason };
+    tally[h].score += score;
+    // Latest meaningful reason wins
+    if (score >= 3) tally[h].reason = reason;
+  };
+  for (const e of events) {
+    if (e.type === "goal") {
+      bump(e.scorer, e.scorerName, e.team, 4, `${countGoals(events, e.scorer)} goal${countGoals(events, e.scorer) > 1 ? "s" : ""}`);
+      if (e.assist && e.assistName) {
+        bump(e.assist, e.assistName, e.team, 2, "playmaker");
+      }
+    }
+    if (e.type === "yellow") bump(e.scorer, e.scorerName, e.team, -0.5, "");
+    if (e.type === "red")    bump(e.scorer, e.scorerName, e.team, -3, "sent off");
+  }
+  // GK with most saves
+  const homeGK = homeSlots.find(s => s.pos === "GK");
+  const awayGK = awaySlots.find(s => s.pos === "GK");
+  if (homeGK && homeSaves >= 4) bump(homeGK.handle, homeGK.displayName, "home", homeSaves * 0.5, `${homeSaves} saves`);
+  if (awayGK && awaySaves >= 4) bump(awayGK.handle, awayGK.displayName, "away", awaySaves * 0.5, `${awaySaves} saves`);
+
+  const ranked = Object.values(tally)
+    // MOTM should usually be from the winning team — slight bonus
+    .map(t => ({ ...t, score: t.score + (t.team === (winnerId === homeId ? "home" : "away") ? 1.5 : 0) }))
+    .sort((a, b) => b.score - a.score);
+
+  const motm: PlayerOfMatch | null = ranked.length > 0 && ranked[0].score >= 2
+    ? {
+        handle:      ranked[0].handle,
+        displayName: ranked[0].name,
+        team:        ranked[0].team,
+        rating:      Math.min(10, Math.max(6.5, 6.5 + ranked[0].score * 0.4)),
+        reason:      ranked[0].reason || "complete performance",
+      }
+    : null;
+
   return {
     homeScore:    homeGoals,
     awayScore:    awayGoals,
@@ -268,7 +483,15 @@ export function simulateMatch(
     events,
     homeStrength: homeStr,
     awayStrength: awayStr,
+    homeStats,
+    awayStats,
+    motm,
   };
+}
+
+// Helper for MOTM goal-count messaging
+function countGoals(events: GoalEvent[], handle: string): number {
+  return events.filter(e => e.type === "goal" && e.scorer === handle).length;
 }
 
 // ── Bracket helpers ───────────────────────────────────────────
