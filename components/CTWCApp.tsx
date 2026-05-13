@@ -3370,6 +3370,24 @@ function RoundRevealSequence({ results, teams, round, isFinal, onDone }: {
           color:"rgba(255,255,255,0.4)"}}>BYE — Auto-advance</div>
       )}
 
+      {/* Forfeit banner — shown when a team had fewer than 11 players */}
+      {cur.forfeit && (
+        <div style={{marginTop:32,
+          padding:"8px 20px",borderRadius:9,
+          background:"linear-gradient(135deg,rgba(239,68,68,0.18),rgba(239,68,68,0.06))",
+          border:"1px solid rgba(239,68,68,0.55)",
+          display:"inline-flex",alignItems:"center",gap:10,
+          boxShadow:"0 0 18px rgba(239,68,68,0.3)",
+        }}>
+          <span style={{fontSize:16}}>⚠️</span>
+          <span style={{fontSize:11,fontWeight:900,letterSpacing:2.5,color:"#F87171"}}>
+            {cur.forfeitedSide === "both"
+              ? "BOTH SQUADS INCOMPLETE — DEFAULT WIN"
+              : "SQUAD INCOMPLETE — FORFEIT (3–0)"}
+          </span>
+        </div>
+      )}
+
       {/* Winner banner (phase=winner) */}
       {phase === "winner" && winner && !cur.bye && (
         <div style={{marginTop:36,
@@ -3884,9 +3902,15 @@ function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
 
         {events.length === 0 && match.status === "complete" && (
           <div style={{padding:"0 24px 28px",textAlign:"center"}}>
-            <div style={{fontSize:32,marginBottom:8}}>{data.bye ? "🚀" : "🔒"}</div>
-            <div style={{fontSize:13,color:"rgba(255,255,255,0.3)"}}>
-              {data.bye ? "Bye — team advances automatically" : "0 – 0 · No goals scored"}
+            <div style={{fontSize:32,marginBottom:8}}>
+              {data.bye ? "🚀" : data.forfeit ? "⚠️" : "🔒"}
+            </div>
+            <div style={{fontSize:13,color: data.forfeit ? "#F87171" : "rgba(255,255,255,0.3)", fontWeight: data.forfeit ? 700 : 500}}>
+              {data.bye
+                ? "Bye — team advances automatically"
+                : data.forfeit
+                  ? `FORFEIT — squad incomplete (${data.homeRosterCount ?? 0} vs ${data.awayRosterCount ?? 0} players)`
+                  : "0 – 0 · No goals scored"}
             </div>
           </div>
         )}

@@ -121,6 +121,73 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
+    // ── Forfeit rule: any team without 11 players auto-loses 3–0 ──
+    // If both teams are incomplete, the team with MORE players wins.
+    // If equal incomplete counts, the home team wins by seeding.
+    const MIN_PLAYERS = 11;
+    const homeRosterCount = (cardsByTeam[match.home_id] ?? []).length;
+    const awayRosterCount = (cardsByTeam[match.away_id] ?? []).length;
+    const homeIncomplete  = homeRosterCount < MIN_PLAYERS;
+    const awayIncomplete  = awayRosterCount < MIN_PLAYERS;
+
+    if (homeIncomplete || awayIncomplete) {
+      let winnerId: string;
+      let homeScore: number;
+      let awayScore: number;
+      let forfeitedSide: "home" | "away" | "both" = "home";
+
+      if (homeIncomplete && !awayIncomplete) {
+        winnerId = match.away_id; homeScore = 0; awayScore = 3; forfeitedSide = "home";
+      } else if (awayIncomplete && !homeIncomplete) {
+        winnerId = match.home_id; homeScore = 3; awayScore = 0; forfeitedSide = "away";
+      } else if (homeRosterCount > awayRosterCount) {
+        winnerId = match.home_id; homeScore = 3; awayScore = 0; forfeitedSide = "both";
+      } else if (awayRosterCount > homeRosterCount) {
+        winnerId = match.away_id; homeScore = 0; awayScore = 3; forfeitedSide = "both";
+      } else {
+        // Equal incomplete counts — home wins by seed position
+        winnerId = match.home_id; homeScore = 3; awayScore = 0; forfeitedSide = "both";
+      }
+
+      await supabase.from("matches").update({
+        home_score: homeScore,
+        away_score: awayScore,
+        winner_id:  winnerId,
+        status:     "complete",
+        match_data: {
+          events: [], forfeit: true, forfeitedSide,
+          homeRosterCount, awayRosterCount,
+        },
+        played_at: new Date().toISOString(),
+      }).eq("id", match.id);
+
+      results.push({
+        matchNum:  match.match_num,
+        homeId:    match.home_id,
+        awayId:    match.away_id,
+        homeScore, awayScore,
+        winnerId,
+        forfeit:   true,
+        forfeitedSide,
+      });
+
+      // Award bonus to winner same as normal match (R16 onwards)
+      const ROUND_BONUS_FF: Record<number, number> = { 1: 0, 2: 3, 3: 3, 4: 3, 5: 5 };
+      const ffBonus = ROUND_BONUS_FF[round] ?? 0;
+      if (ffBonus > 0 && winnerId) {
+        const { data: winnerCards } = await supabase
+          .from("cards").select("id, bonus_ovr").eq("team_id", winnerId);
+        if (winnerCards && winnerCards.length > 0) {
+          await Promise.allSettled(winnerCards.map(c =>
+            supabase.from("cards")
+              .update({ bonus_ovr: (c.bonus_ovr ?? 0) + ffBonus })
+              .eq("id", c.id)
+          ));
+        }
+      }
+      continue;
+    }
+
     const homeSlots = buildSlots(match.home_id);
     const awaySlots = buildSlots(match.away_id);
     const result    = simulateMatch(
