@@ -1960,10 +1960,28 @@ function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool
 
           {/* Copy */}
           <div style={{flex:"1 1 380px",maxWidth:530,animation:"fadeUp 0.6s ease both"}}>
-            <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"5px 14px",borderRadius:20,background:"rgba(212,165,55,0.08)",border:"1px solid rgba(212,165,55,0.2)",fontSize:10,fontWeight:700,color:"#FBBF24",marginBottom:26,letterSpacing:2}}>
-              <span style={{width:6,height:6,borderRadius:"50%",background:"#22C55E",boxShadow:"0 0 6px #22C55E",display:"inline-block",animation:"ppulse 2s ease-in-out infinite"}}/>
-              SEASON 1 · REGISTRATION OPEN
-            </div>
+            {/* Dynamic status pill — reflects current tournament phase */}
+            {(() => {
+              const tStatus = tournament?.status ?? "registration";
+              const rNames: Record<number, string> = { 1:"R32", 2:"R16", 3:"QF", 4:"SF", 5:"FINAL" };
+              const pill =
+                tStatus === "complete"     ? { label: "SEASON 1 · COMPLETE 🏆",                  dot: "#FBBF24", border: "rgba(212,165,55,0.5)", bg: "rgba(212,165,55,0.12)", text: "#FBBF24" } :
+                tStatus === "active"       ? { label: `SEASON 1 · ${rNames[tournament?.current_round] ?? "LIVE"} IN PROGRESS`, dot: "#EF4444", border: "rgba(239,68,68,0.4)", bg: "rgba(239,68,68,0.08)", text: "#F87171" } :
+                tStatus === "seeded"       ? { label: "SEASON 1 · BRACKET LOCKED",                dot: "#FBBF24", border: "rgba(212,165,55,0.4)", bg: "rgba(212,165,55,0.08)", text: "#FBBF24" } :
+                                             { label: "SEASON 1 · REGISTRATION OPEN",            dot: "#22C55E", border: "rgba(34,197,94,0.3)", bg: "rgba(34,197,94,0.08)", text: "#22C55E" };
+              return (
+                <div style={{
+                  display:"inline-flex",alignItems:"center",gap:8,padding:"5px 14px",borderRadius:20,
+                  background:pill.bg,border:`1px solid ${pill.border}`,
+                  fontSize:10,fontWeight:700,color:pill.text,marginBottom:26,letterSpacing:2,
+                }}>
+                  <span style={{width:6,height:6,borderRadius:"50%",background:pill.dot,
+                    boxShadow:`0 0 6px ${pill.dot}`,display:"inline-block",
+                    animation:"ppulse 2s ease-in-out infinite"}}/>
+                  {pill.label}
+                </div>
+              );
+            })()}
 
             <h1 style={{fontSize:64,fontWeight:900,lineHeight:1.03,margin:"0 0 8px",letterSpacing:-2.5}}>
               Crypto Twitter.<br/>
@@ -1971,7 +1989,12 @@ function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool
             </h1>
 
             <p style={{fontSize:16,color:"rgba(255,255,255,0.42)",lineHeight:1.72,margin:"22px 0 34px",maxWidth:430}}>
-              Your CT stats become your player card. Join one of 32 teams. The tournament runs on real engagement — tweet more, win more.
+              {tournament?.status === "complete"
+                ? "The bracket has crowned its champion. View the final results, hall of fame, and stat leaders below."
+                : (tournament?.status === "seeded" || tournament?.status === "active")
+                  ? "The bracket is locked. Your card stats refresh from your live X engagement before every round — tweet harder, win more."
+                  : "Your CT stats become your player card. Join one of 32 teams. The tournament runs on real engagement — tweet more, win more."
+              }
             </p>
 
             {sessionLoading ? (
