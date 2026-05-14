@@ -2009,6 +2009,14 @@ function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool
                   transform:hov?"translateY(-2px)":"translateY(0)",transition:"all 0.25s",display:"inline-flex",alignItems:"center",gap:10}}>
                 ⚽ My Team · OVR {myCard.ovr}
               </button>
+            ) : (tournament?.status && tournament.status !== "registration") ? (
+              // Registration locked — direct visitors to the bracket instead of mint
+              <button onClick={()=>{SFX.click();onTournament();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+                style={{padding:"16px 36px",fontSize:15,fontWeight:700,color:"#1a1a1a",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:12,cursor:"pointer",
+                  boxShadow:hov?"0 0 44px rgba(212,165,55,0.55),0 8px 24px rgba(212,165,55,0.3)":"0 4px 20px rgba(212,165,55,0.22)",
+                  transform:hov?"translateY(-2px)":"translateY(0)",transition:"all 0.25s",display:"inline-flex",alignItems:"center",gap:10}}>
+                🏆 Watch the Tournament
+              </button>
             ) : (
               <button onClick={()=>{SFX.click();onConnect();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
                 style={{padding:"16px 36px",fontSize:15,fontWeight:700,color:"#1a1a1a",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:12,cursor:"pointer",
@@ -2920,7 +2928,8 @@ const LB_METRICS = [
     fmt:(v:number)=>v.toLocaleString() },
 ];
 
-function LeaderboardPage({ pool, teams, myCard, onBack, onClaim }: any) {
+function LeaderboardPage({ pool, teams, myCard, onBack, onClaim, tournament }: any) {
+  const registrationLocked = tournament?.status && tournament.status !== "registration";
   const [metric, setMetric] = useState(LB_METRICS[0]);
   const [selected, setSelected] = useState<any>(null);
 
@@ -2952,7 +2961,12 @@ function LeaderboardPage({ pool, teams, myCard, onBack, onClaim }: any) {
               <div style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",boxShadow:"0 0 6px #22C55E"}}/>
               <span style={{fontSize:11,fontWeight:700,color:"#22C55E"}}>{myRank > 0 ? `Ranked #${myRank}` : `OVR ${myCard.ovr}`}</span>
             </div>
-          : <button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>
+          : registrationLocked
+            ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",borderRadius:8,background:"rgba(212,165,55,0.1)",border:"1px solid rgba(212,165,55,0.3)"}}>
+                <span style={{fontSize:11}}>🔒</span>
+                <span style={{fontSize:11,fontWeight:700,color:"#FBBF24"}}>Registration Closed</span>
+              </div>
+            : <button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>
       }/>
 
       {/* Header */}
@@ -3099,7 +3113,7 @@ const SORT_OPTIONS = [
   { k:"followers",  label:"Followers" },
 ];
 
-function PlayerPool({ pool, myCard, onBack, onClaim }) {
+function PlayerPool({ pool, myCard, onBack, onClaim, tournament }: any) {
   const [filter,setFilter]   = useState("All");
   const [posFilter,setPosFilter] = useState("All");
   const [search,setSearch]   = useState("");
@@ -3129,6 +3143,7 @@ function PlayerPool({ pool, myCard, onBack, onClaim }) {
   }, [pool, filter, posFilter, search, sort]);
 
   const hasClaimed = !!myCard;
+  const registrationLocked = tournament?.status && tournament.status !== "registration";
 
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -3140,7 +3155,12 @@ function PlayerPool({ pool, myCard, onBack, onClaim }) {
               <div style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",boxShadow:"0 0 6px #22C55E"}}/>
               <span style={{fontSize:11,fontWeight:700,color:"#22C55E"}}>Card Claimed · OVR {myCard.ovr}</span>
             </div>
-          : <button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>
+          : registrationLocked
+            ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",borderRadius:8,background:"rgba(212,165,55,0.1)",border:"1px solid rgba(212,165,55,0.3)"}}>
+                <span style={{fontSize:11}}>🔒</span>
+                <span style={{fontSize:11,fontWeight:700,color:"#FBBF24"}}>Registration Closed</span>
+              </div>
+            : <button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>
       }/>
 
       <div style={{padding:"8px 24px",borderBottom:"1px solid rgba(255,255,255,0.04)",display:"flex",gap:20,overflowX:"auto"}}>
@@ -3206,7 +3226,7 @@ function PlayerPool({ pool, myCard, onBack, onClaim }) {
         {visible.length===0 ? (
           <div style={{textAlign:"center",padding:"70px 0"}}>
             <p style={{fontSize:14,color:"rgba(255,255,255,0.3)"}}>No cards yet</p>
-            {!hasClaimed && <button onClick={onClaim} style={{marginTop:12,padding:"11px 24px",fontSize:13,fontWeight:700,borderRadius:9,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>Be the First</button>}
+            {!hasClaimed && !registrationLocked && <button onClick={onClaim} style={{marginTop:12,padding:"11px 24px",fontSize:13,fontWeight:700,borderRadius:9,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>Be the First</button>}
           </div>
         ) : (
           <div style={{display:"flex",flexWrap:"wrap",gap:18}}>
@@ -3237,7 +3257,8 @@ function PlayerPool({ pool, myCard, onBack, onClaim }) {
 }
 
 // ─── TEAMS LIST ───────────────────────────────────────────────
-function TeamsListPage({ teams, myCard, onBack, onViewTeam, onClaim }) {
+function TeamsListPage({ teams, myCard, onBack, onViewTeam, onClaim, tournament }: any) {
+  const registrationLocked = tournament?.status && tournament.status !== "registration";
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <Nav onHome={onBack} right={
@@ -3246,7 +3267,12 @@ function TeamsListPage({ teams, myCard, onBack, onViewTeam, onClaim }) {
               <div style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",boxShadow:"0 0 6px #22C55E"}}/>
               <span style={{fontSize:11,fontWeight:700,color:"#22C55E"}}>OVR {myCard.ovr} · {myCard.position?.code ?? "—"}</span>
             </div>
-          : <button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>
+          : registrationLocked
+            ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"5px 12px",borderRadius:8,background:"rgba(212,165,55,0.1)",border:"1px solid rgba(212,165,55,0.3)"}}>
+                <span style={{fontSize:11}}>🔒</span>
+                <span style={{fontSize:11,fontWeight:700,color:"#FBBF24"}}>Registration Closed</span>
+              </div>
+            : <button onClick={onClaim} style={{padding:"7px 14px",fontSize:11,fontWeight:700,borderRadius:7,background:"linear-gradient(135deg,#D4A537,#FBBF24)",border:"none",color:"#1a1a1a",cursor:"pointer"}}>+ Claim Card</button>
       }/>
       <div style={{maxWidth:800,margin:"0 auto",padding:"28px 20px"}}>
         <h2 style={{fontSize:22,fontWeight:800,margin:"0 0 20px"}}>All Teams ({teams.length})</h2>
@@ -5021,7 +5047,7 @@ export default function CTWCApp() {
       )}
 
       {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} onLeaderboard={()=>setPage("leaderboard")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} tournament={tournament} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
-      {page==="leaderboard" && <LeaderboardPage pool={pool} teams={teams} myCard={pending} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
+      {page==="leaderboard" && <LeaderboardPage pool={pool} teams={teams} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="tourneyStats" && <TournamentStatsPage matches={matchResults} teams={teams} pool={pool} myCard={pending} onBack={()=>setPage("tournament")}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
       {page==="revealReady" && pending && (
@@ -5045,8 +5071,8 @@ export default function CTWCApp() {
       {page==="createTeam"  && pending && <CreateTeamPage card={pending} onCreated={handleCreatedTeam} onBack={()=>setPage("browseTeams")}/>}
       {page==="browseTeams" && <BrowseTeamsPage card={pending} teams={teams} onJoined={handleJoinedTeam} onBack={()=>setPage("landing")}/>}
       {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} tournament={tournament} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
-      {page==="pool"        && <PlayerPool pool={pool} myCard={pending} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
-      {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
+      {page==="pool"        && <PlayerPool pool={pool} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
+      {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
       {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} onStats={()=>setPage("tourneyStats")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}
       {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
 
