@@ -2584,14 +2584,16 @@ function PositionPickerModal({ team, onPick, onCancel, loading }: any) {
 }
 
 // ─── TEAM PAGE ────────────────────────────────────────────────
-function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBrowse }) {
+function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBrowse, tournament }: any) {
   const [expandCard, setExpandCard]   = useState(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
-  const filled   = team.slots.filter(s=>s.card).length;
-  const captain  = team.slots.find(s=>s.card?.id===team.captainId)?.card;
-  const mySlot   = team.slots.findIndex(s=>s.card?.id===myCardId);
+  const filled   = team.slots.filter((s: any) => s.card).length;
+  const captain  = team.slots.find((s: any) => s.card?.id===team.captainId)?.card;
+  const mySlot   = team.slots.findIndex((s: any) => s.card?.id===myCardId);
   const myCard   = mySlot>=0 ? team.slots[mySlot].card : null;
   const amOnTeam = !!myCard;
+  // Once the bracket is seeded, squads are frozen — Leave button disappears.
+  const squadsLocked = tournament?.status && tournament.status !== "registration";
 
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -2601,11 +2603,21 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
         </div>
       )}
       <Nav onHome={onBack} right={
-        <div style={{display:"flex",gap:8}}>
-          {amOnTeam&&!confirmLeave&&(
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {/* Squad lock badge — replaces Leave Team after bracket is seeded */}
+          {amOnTeam && squadsLocked && (
+            <div style={{
+              display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:7,
+              background:"rgba(212,165,55,0.1)",border:"1px solid rgba(212,165,55,0.3)",
+              fontSize:10,fontWeight:700,color:"#FBBF24",letterSpacing:1.5,
+            }}>
+              <span>🔒</span><span>SQUAD LOCKED</span>
+            </div>
+          )}
+          {amOnTeam && !squadsLocked && !confirmLeave && (
             <button onClick={()=>setConfirmLeave(true)} style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.25)",color:"#F87171",borderRadius:7,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:600}}>Leave Team</button>
           )}
-          {confirmLeave&&(
+          {!squadsLocked && confirmLeave && (
             <>
               <button onClick={()=>{SFX.click();setConfirmLeave(false);onLeave(team,myCardId);}} style={{background:"rgba(239,68,68,0.15)",border:"1px solid #EF4444",color:"#FCA5A5",borderRadius:7,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:700}}>Confirm Leave</button>
               <button onClick={()=>setConfirmLeave(false)} style={{background:"transparent",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.4)",borderRadius:7,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Cancel</button>
@@ -5032,7 +5044,7 @@ export default function CTWCApp() {
       {page==="teamSetup"   && pending && <TeamSetupPage card={pending} onBrowseTeams={()=>setPage("browseTeams")} onSkip={()=>setPage("pool")}/>}
       {page==="createTeam"  && pending && <CreateTeamPage card={pending} onCreated={handleCreatedTeam} onBack={()=>setPage("browseTeams")}/>}
       {page==="browseTeams" && <BrowseTeamsPage card={pending} teams={teams} onJoined={handleJoinedTeam} onBack={()=>setPage("landing")}/>}
-      {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
+      {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} tournament={tournament} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
       {page==="pool"        && <PlayerPool pool={pool} myCard={pending} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
       {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} onStats={()=>setPage("tourneyStats")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}

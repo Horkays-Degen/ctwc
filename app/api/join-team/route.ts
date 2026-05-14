@@ -93,11 +93,21 @@ export async function POST(req: NextRequest) {
 
 // DELETE /api/join-team
 // Body: { card_id: string }
+// Locked once the bracket is seeded — once a tournament is in progress,
+// no one can swap teams or abandon their squad. Same gate as joining.
 export async function DELETE(req: NextRequest) {
   try {
     const { card_id } = await req.json();
     if (!card_id) {
       return NextResponse.json({ error: "card_id required" }, { status: 400 });
+    }
+
+    // Registration gate also covers leaves — once locked, you're committed
+    const closedReason = await checkRegistrationOpen();
+    if (closedReason) {
+      return NextResponse.json({
+        error: "Teams are locked — the bracket has been seeded."
+      }, { status: 403 });
     }
 
     const supabase = createAdminClient();
