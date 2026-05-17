@@ -1825,9 +1825,26 @@ function NotificationStack({ notifications, onDismiss, onClick }: any) {
   );
 }
 
-// ─── REGISTRATION COUNTDOWN ───────────────────────────────────
-// Live ticker banner shown above the hero. Hides when no deadline is set
-// or after the bracket is seeded (registration already closed).
+// ─── ROUND SCHEDULE ────────────────────────────────────────────
+// Fixed dates for the season-1 tournament. Each value is when round X
+// will be simulated (kicks off). Used by the landing countdown banner
+// to tell visitors when to be on the site for each round.
+const ROUND_DATES: Record<number, string> = {
+  1: "2026-05-19T20:00:00Z", // R32 — Tuesday May 19, 8pm UTC
+  2: "2026-05-26T20:00:00Z", // R16 — Tuesday May 26, 8pm UTC
+  3: "2026-06-02T20:00:00Z", // QF  — Tuesday June 2,  8pm UTC
+  4: "2026-06-08T20:00:00Z", // SF  — Monday June 8,   8pm UTC
+  5: "2026-06-10T20:00:00Z", // 🏆 Final — Wednesday June 10, 8pm UTC
+};
+const ROUND_LABELS: Record<number, string> = {
+  1: "R32", 2: "R16", 3: "QF", 4: "SF", 5: "GRAND FINAL",
+};
+
+// ─── PHASE COUNTDOWN BANNER ───────────────────────────────────
+// Adapts based on tournament phase:
+//   registration  → counts down to registration deadline
+//   seeded/active → counts down to next round simulate
+//   complete      → shows champion (no banner)
 function RegistrationCountdown({ tournament }: any) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -1835,11 +1852,27 @@ function RegistrationCountdown({ tournament }: any) {
     return () => clearInterval(id);
   }, []);
 
-  const deadline = tournament?.registration_deadline;
-  if (!deadline) return null;
-  if (tournament?.status && tournament.status !== "registration") return null;
+  // Figure out what to count down to
+  const status = tournament?.status ?? "registration";
+  let target:   number  | null = null;
+  let prefix:   string         = "";
 
-  const target = new Date(deadline).getTime();
+  if (status === "registration") {
+    if (!tournament?.registration_deadline) return null;
+    target = new Date(tournament.registration_deadline).getTime();
+  } else if (status === "seeded" || status === "active") {
+    // Next round to simulate = current_round + 1 if active, or 1 if just seeded
+    const nextRound = status === "seeded" ? 1 : (tournament?.current_round ?? 0) + 1;
+    if (nextRound > 5) return null; // tournament effectively done
+    const dateStr = ROUND_DATES[nextRound];
+    if (!dateStr) return null;
+    target = new Date(dateStr).getTime();
+    prefix = `${ROUND_LABELS[nextRound] ?? "ROUND " + nextRound} STARTS IN`;
+  } else {
+    return null; // complete
+  }
+
+  if (target === null) return null;
   const ms = target - now;
   const closed = ms <= 0;
 
@@ -1850,14 +1883,24 @@ function RegistrationCountdown({ tournament }: any) {
   const mins  = Math.floor((total % 3_600_000) / 60_000);
   const secs  = Math.floor((total % 60_000) / 1000);
 
-  // Urgency tiers — colour & pulse change as deadline approaches
+  // Urgency tiers — color & pulse change as countdown approaches zero
+  const isReg = status === "registration";
   const urgency = closed
-    ? { color: "#EF4444", glow: "rgba(239,68,68,0.55)", label: "REGISTRATION CLOSED", anim: "" }
+    ? isReg
+      ? { color: "#EF4444", glow: "rgba(239,68,68,0.55)", label: "REGISTRATION CLOSED", anim: "" }
+      : { color: "#EF4444", glow: "rgba(239,68,68,0.55)", label: `${prefix.replace(" STARTS IN", "")} — LIVE NOW`, anim: "ppulse 0.9s ease-in-out infinite" }
     : days >= 1
-      ? { color: "#22C55E", glow: "rgba(34,197,94,0.4)", label: "REGISTRATION OPEN — Lock-in counts down", anim: "" }
+      ? { color: isReg ? "#22C55E" : "#FBBF24",
+          glow:  isReg ? "rgba(34,197,94,0.4)" : "rgba(212,165,55,0.4)",
+          label: isReg ? "REGISTRATION OPEN — Lock-in counts down" : prefix,
+          anim:  "" }
       : hrs >= 1
-        ? { color: "#FBBF24", glow: "rgba(212,165,55,0.5)", label: "FINAL HOURS — Claim your card", anim: "" }
-        : { color: "#EF4444", glow: "rgba(239,68,68,0.55)", label: "DEADLINE IMMINENT", anim: "ppulse 0.9s ease-in-out infinite" };
+        ? { color: "#FBBF24", glow: "rgba(212,165,55,0.5)",
+            label: isReg ? "FINAL HOURS — Claim your card" : prefix + " — FEW HOURS LEFT",
+            anim:  "" }
+        : { color: "#EF4444", glow: "rgba(239,68,68,0.55)",
+            label: isReg ? "DEADLINE IMMINENT" : prefix + " — STARTING SOON",
+            anim:  "ppulse 0.9s ease-in-out infinite" };
 
   const cell = (n: number, label: string) => (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
