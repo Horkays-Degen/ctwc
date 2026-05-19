@@ -1861,8 +1861,10 @@ function RegistrationCountdown({ tournament }: any) {
     if (!tournament?.registration_deadline) return null;
     target = new Date(tournament.registration_deadline).getTime();
   } else if (status === "seeded" || status === "active") {
-    // Next round to simulate = current_round + 1 if active, or 1 if just seeded
-    const nextRound = status === "seeded" ? 1 : (tournament?.current_round ?? 0) + 1;
+    // tournament.current_round already represents the NEXT round to simulate
+    // (the simulate route writes `current_round = round + 1` after running)
+    // No +1 needed here — that bug made the countdown skip rounds.
+    const nextRound = Math.max(1, tournament?.current_round ?? 1);
     if (nextRound > 5) return null; // tournament effectively done
     const dateStr = ROUND_DATES[nextRound];
     if (!dateStr) return null;
@@ -4106,15 +4108,45 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, tournamen
   const isActive   = status === "active" || status === "seeded" || status === "complete";
 
   const ROUND_LABEL: Record<number,string> = {1:"Round of 32",2:"Round of 16",3:"Quarter Finals",4:"Semi Finals",5:"Final"};
+  const ROUND_COUNTS: Record<number,number> = {1:16, 2:8, 3:4, 4:2, 5:1};
 
   // Team lookup by id
   const teamById: Record<string,any> = {};
   teams.forEach(t => teamById[t.id] = t);
 
-  // Matches for current round
-  const currentMatches = (matches ?? []).filter((m:any) => m.round_num === curRound);
-  const displayRound   = curRound > 0 ? curRound : 1;
-  const displayMatches = currentMatches.length > 0 ? currentMatches : (matches ?? []).filter((m:any) => m.round_num === displayRound);
+  // Generate matches for a given round — real data or TBD placeholders
+  const getMatchesForRound = (round: number): any[] => {
+    const real = (matches ?? []).filter((m:any) => m.round_num === round);
+    if (real.length > 0) return real;
+    // No real matches yet for this round — show TBD placeholders
+    return Array.from({length: ROUND_COUNTS[round] ?? 1}, (_, i) => ({
+      id:         `placeholder-${round}-${i+1}`,
+      match_num:  i + 1,
+      round_num:  round,
+      home_id:    null,
+      away_id:    null,
+      status:     "scheduled",
+      placeholder: true,
+    }));
+  };
+
+  // Default round to display: the most recently completed round
+  // (e.g. after R32 plays out, current_round=2 → show R32 results first)
+  const defaultRound = status === "complete" ? 5
+                     : status === "seeded"   ? 1
+                     : Math.max(1, curRound - 1);
+  const [userRound, setUserRound] = useState<number | null>(null);
+  const displayRound = userRound ?? defaultRound;
+  const displayMatches = getMatchesForRound(displayRound);
+
+  // Status label for the section header
+  const roundStatusLabel = (() => {
+    const real = (matches ?? []).filter((m:any) => m.round_num === displayRound);
+    if (real.length === 0) return "AWAITING EARLIER ROUNDS";
+    const done = real.every((m:any) => m.status === "complete");
+    if (done) return "FINAL RESULTS";
+    return displayRound === curRound ? "LIVE FIXTURES" : "FIXTURES";
+  })();
 
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -4191,32 +4223,47 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, tournamen
       {/* Matches section */}
       <div style={{maxWidth:900,margin:"0 auto",padding:"0 20px 40px"}}>
 
-        {/* Round navigation pills */}
+        {/* Round navigation pills — clickable, highlights selected round */}
         {isActive && (
           <div style={{display:"flex",gap:6,marginBottom:20,overflowX:"auto",paddingBottom:4}}>
-            {[1,2,3,4,5].map(r=>{
-              const rMatches = (matches??[]).filter((m:any)=>m.round_num===r);
-              const done     = rMatches.every((m:any)=>m.status==="complete");
-              const active   = r===curRound;
+            {[1,2,3,4,5].map(r => {
+              const rMatches = (matches ?? []).filter((m:any) => m.round_num === r);
+              const done     = rMatches.length > 0 && rMatches.every((m:any) => m.status === "complete");
+              const exists   = rMatches.length > 0;
+              const selected = displayRound === r;
               return (
-                <div key={r} style={{flexShrink:0,padding:"6px 14px",borderRadius:8,
-                  background:active?"rgba(212,165,55,0.12)":done?"rgba(34,197,94,0.08)":"rgba(255,255,255,0.03)",
-                  border:active?"1px solid rgba(212,165,55,0.3)":done?"1px solid rgba(34,197,94,0.2)":"1px solid rgba(255,255,255,0.07)",
-                  fontSize:11,fontWeight:700,
-                  color:active?"#FBBF24":done?"#22C55E":"rgba(255,255,255,0.35)",
-                  letterSpacing:0.5}}>
-                  {ROUND_LABEL[r]}{done&&!active?" ✓":""}
-                </div>
+                <button
+                  key={r}
+                  onClick={() => { try { SFX.click(); } catch {}; setUserRound(r); }}
+                  style={{
+                    flexShrink:0, padding:"7px 14px", borderRadius:8, cursor:"pointer",
+                    background: selected ? "rgba(212,165,55,0.18)" : done ? "rgba(34,197,94,0.06)" : "rgba(255,255,255,0.03)",
+                    border: `1px solid ${selected ? "rgba(212,165,55,0.55)" : done ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.07)"}`,
+                    fontSize:11, fontWeight:700, letterSpacing:0.5,
+                    color: selected ? "#FBBF24" : done ? "#22C55E" : exists ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.25)",
+                    boxShadow: selected ? "0 0 14px rgba(212,165,55,0.25)" : "none",
+                    transition: "all 0.18s",
+                  }}
+                  onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.07)"; }}
+                  onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLElement).style.background = done ? "rgba(34,197,94,0.06)" : "rgba(255,255,255,0.03)"; }}
+                >
+                  {ROUND_LABEL[r]}{done ? " ✓" : !exists ? " ?" : ""}
+                </button>
               );
             })}
           </div>
         )}
 
-        {/* Current round matches */}
+        {/* Selected round matches */}
         {isActive && displayMatches.length > 0 && (
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.35)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>
-              {ROUND_LABEL[curRound] || "Matches"}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:12,flexWrap:"wrap"}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#fff",letterSpacing:0.5}}>
+                {ROUND_LABEL[displayRound] || "Matches"}
+              </div>
+              <div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",letterSpacing:1.5}}>
+                {roundStatusLabel}
+              </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
               {displayMatches.map((m:any)=>{
