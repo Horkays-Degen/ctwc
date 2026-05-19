@@ -4850,6 +4850,25 @@ export default function CTWCApp() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // ── Real-time: refresh tournament + bracket for EVERYONE ─────
+  // Critical: without this, only the admin who clicked Simulate sees
+  // the bracket update. Every other visitor sees stale "Live" status
+  // with no results visible until they manually refresh.
+  // Subscribing here ensures all open browsers auto-refresh tournament
+  // state + matches within seconds of any DB change.
+  useEffect(() => {
+    const ch = supabase
+      .channel("tournament-realtime")
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "tournament" },
+        () => { loadTournament(); })
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "matches" },
+        () => { loadTournament(); })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
   // ── Real-time: match results — push notifications for the user's team ──
   useEffect(() => {
     const myTeamId = pending?.teamId;
