@@ -485,6 +485,36 @@ const ACOLORS=["#6366F1","#8B5CF6","#EC4899","#F43F5E","#F59E0B","#10B981","#3B8
 const aColor= n => ACOLORS[n.charCodeAt(0)%ACOLORS.length];
 const inits = n => n.split(" ").map(w=>w[0]).join("").substring(0,2).toUpperCase();
 
+// PlayerLink — wraps a player's name so clicking opens their X profile.
+// Used anywhere a name appears. Stops propagation so it doesn't trigger
+// parent click handlers (e.g. opening a match modal). The `handle` is the
+// X username without @ prefix. Falls back to a span if no handle given.
+function PlayerLink({ handle, name, children, style }:
+  { handle?: string | null; name?: string; children?: React.ReactNode; style?: React.CSSProperties }) {
+  const content = children ?? name ?? "—";
+  if (!handle) {
+    return <span style={style}>{content}</span>;
+  }
+  return (
+    <a
+      href={`https://x.com/${handle}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => { e.stopPropagation(); }}
+      title={`@${handle} on X`}
+      style={{
+        color: "inherit", textDecoration: "none",
+        cursor: "pointer", transition: "color 0.15s, opacity 0.15s",
+        ...style,
+      }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "0.75"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+    >
+      {content}
+    </a>
+  );
+}
+
 // Wrap external avatar URLs in our /api/avatar-proxy so they can be drawn
 // to canvas for PNG export. Same-origin URLs (e.g. our Supabase storage
 // served via CORS-allowed bucket) are returned as-is.
@@ -2970,7 +3000,12 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
                       )}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
-                      {c?(<><div style={{fontSize:11,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.displayName}{c.id===team.captainId&&" 👑"}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.35)",fontFamily:"monospace"}}>@{c.handle}</div></>)
+                      {c?(<>
+                        <div style={{fontSize:11,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                          <PlayerLink handle={c.handle} name={c.displayName}/>{c.id===team.captainId&&" 👑"}
+                        </div>
+                        <PlayerLink handle={c.handle} style={{display:"block",fontSize:9,color:"rgba(255,255,255,0.35)",fontFamily:"monospace"}}>@{c.handle}</PlayerLink>
+                      </>)
                       :(<div style={{fontSize:10,color:"rgba(255,255,255,0.2)",fontStyle:"italic"}}>Empty slot</div>)}
                     </div>
                     {c&&(<div style={{flexShrink:0,textAlign:"right"}}><div style={{fontSize:12,fontWeight:800,color:c.tier.accent}}>{c.ovr}</div><div style={{fontSize:8,color:"rgba(255,255,255,0.3)"}}>{ps.pos}</div></div>)}
@@ -3165,10 +3200,11 @@ function TournamentStatsPage({ matches, teams, pool, myCard, onBack }: any) {
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:14,fontWeight:800,color:"#fff",
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                  {p.name}{isMe && <span style={{fontSize:9,fontWeight:800,color:"#FBBF24",letterSpacing:1.5,marginLeft:6}}>YOU</span>}
+                  <PlayerLink handle={p.handle} name={p.name}/>
+                  {isMe && <span style={{fontSize:9,fontWeight:800,color:"#FBBF24",letterSpacing:1.5,marginLeft:6}}>YOU</span>}
                 </div>
                 <div style={{display:"flex",gap:6,alignItems:"center",marginTop:1}}>
-                  <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"monospace"}}>@{p.handle}</span>
+                  <PlayerLink handle={p.handle} style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"monospace"}}>@{p.handle}</PlayerLink>
                   {team && (
                     <>
                       <span style={{fontSize:9,color:"rgba(255,255,255,0.2)"}}>·</span>
@@ -3340,9 +3376,8 @@ function LeaderboardPage({ pool, teams, myCard, onBack, onClaim, tournament }: a
               {/* Name + handle + team */}
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:7}}>
-                  <span style={{fontSize:14,fontWeight:800,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                    {c.displayName}
-                  </span>
+                  <PlayerLink handle={c.handle} name={c.displayName}
+                    style={{fontSize:14,fontWeight:800,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}/>
                   {isMe && <span style={{fontSize:9,fontWeight:800,color:"#FBBF24",letterSpacing:1.5}}>YOU</span>}
                   {c.rawProfile?.verified && <span style={{fontSize:11,color:"#1D9BF0"}}>✓</span>}
                 </div>
@@ -4059,44 +4094,75 @@ function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
           </div>
         </div>
 
-        {/* ── Pitch timeline ── */}
+        {/* ── Match Timeline — goals + cards + assists ── */}
         {events.length > 0 && (
           <div style={{padding:"0 24px 20px"}}>
-            <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>Match Timeline</div>
-            <div style={{position:"relative",height:56,background:"rgba(255,255,255,0.02)",borderRadius:10,border:"1px solid rgba(255,255,255,0.06)",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <div style={{fontSize:9,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase"}}>Match Timeline</div>
+              {/* Legend */}
+              <div style={{display:"flex",gap:10,fontSize:8,color:"rgba(255,255,255,0.4)",letterSpacing:0.5}}>
+                <span>⚽ GOAL</span>
+                <span>🟨 YELLOW</span>
+                <span>🟥 RED</span>
+              </div>
+            </div>
+            <div style={{position:"relative",height:64,background:"rgba(255,255,255,0.02)",borderRadius:10,border:"1px solid rgba(255,255,255,0.06)",overflow:"hidden"}}>
               {/* Pitch markings */}
               <div style={{position:"absolute",left:"50%",top:4,bottom:4,width:1,background:"rgba(255,255,255,0.08)"}}/>
               <div style={{position:"absolute",left:"25%",top:12,bottom:12,width:1,background:"rgba(255,255,255,0.04)"}}/>
               <div style={{position:"absolute",left:"75%",top:12,bottom:12,width:1,background:"rgba(255,255,255,0.04)"}}/>
-              {/* Center line label */}
+              {/* Halftime + corner labels */}
               <div style={{position:"absolute",left:4,top:"50%",transform:"translateY(-50%)",fontSize:8,color:"rgba(255,255,255,0.18)",fontWeight:700}}>0'</div>
+              <div style={{position:"absolute",left:"50%",top:1,transform:"translateX(-50%)",fontSize:7,color:"rgba(255,255,255,0.2)",fontWeight:700,letterSpacing:1}}>HT</div>
               <div style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",fontSize:8,color:"rgba(255,255,255,0.18)",fontWeight:700}}>90'</div>
-              {/* Goal dots */}
+
+              {/* Event markers — goals, yellows, reds */}
               {events.map((e:any, i:number) => {
                 const isHome = e.team === "home";
+                const evType = e.type ?? "goal";
                 const pct    = Math.min((e.minute / 90) * 100, 98);
+
+                // Style varies by event type
+                const cfg =
+                  evType === "goal"   ? { icon:"⚽", bg: isHome?hColor:aColor, fg:"#fff",     border:"transparent", shadow:`0 0 10px ${isHome?hColor:aColor}88`, size: 22 } :
+                  evType === "yellow" ? { icon:"",   bg:"#FBBF24",              fg:"#1a1a1a", border:"rgba(0,0,0,0.4)", shadow:"0 0 6px rgba(212,165,55,0.5)", size: 14 } :
+                  evType === "red"    ? { icon:"",   bg:"#EF4444",              fg:"#fff",     border:"rgba(0,0,0,0.4)", shadow:"0 0 8px rgba(239,68,68,0.6)", size: 14 } :
+                                        { icon:"⚪", bg:"rgba(255,255,255,0.4)",fg:"#fff",     border:"transparent", shadow:"none", size: 14 };
+
+                const tooltip =
+                  evType === "goal"   ? `⚽ ${e.scorerName} ${e.minute}'${e.assistName ? ` (🅰 ${e.assistName})` : ""}` :
+                  evType === "yellow" ? `🟨 ${e.scorerName} ${e.minute}' (booked)` :
+                  evType === "red"    ? `🟥 ${e.scorerName} ${e.minute}' (sent off)` :
+                                        `${e.scorerName} ${e.minute}'`;
+
                 return (
-                  <div key={i} title={`${e.scorerName} ${e.minute}'`} style={{
+                  <div key={i} title={tooltip} style={{
                     position:"absolute",
                     left:`${pct}%`,
-                    top: isHome ? 4 : undefined,
-                    bottom: isHome ? undefined : 4,
+                    top:    isHome ? 6 : undefined,
+                    bottom: isHome ? undefined : 6,
                     transform:"translateX(-50%)",
-                    width:22,height:22,borderRadius:"50%",
-                    background: isHome ? hColor : aColor,
+                    width: cfg.size,
+                    height: cfg.size,
+                    borderRadius: evType === "yellow" || evType === "red" ? 3 : "50%",  // cards are squares
+                    background: cfg.bg,
+                    color: cfg.fg,
+                    border: `1px solid ${cfg.border}`,
                     display:"flex",alignItems:"center",justifyContent:"center",
-                    fontSize:11,
-                    boxShadow:`0 0 10px ${isHome?hColor:aColor}88`,
+                    fontSize: cfg.size > 18 ? 11 : 9,
+                    boxShadow: cfg.shadow,
                     cursor:"default",
-                    zIndex:2,
-                  }}>⚽</div>
+                    zIndex: evType === "goal" ? 3 : 2,
+                  }}>{cfg.icon}</div>
                 );
               })}
             </div>
-            {/* Minute labels under goals */}
-            <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-              {events.map((e:any,i:number)=>(
-                <div key={i} style={{fontSize:8,color:`${e.team==="home"?hColor:aColor}cc`,fontWeight:700}}>{e.minute}'</div>
+            {/* Goal-only minute labels under the timeline */}
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:5,padding:"0 4px"}}>
+              {events.filter((e:any) => (e.type ?? "goal") === "goal").map((e:any,i:number) => (
+                <div key={i} style={{fontSize:8,color:`${e.team==="home"?hColor:aColor}cc`,fontWeight:700}}>
+                  {e.scorerName.split(" ")[0]} {e.minute}'
+                </div>
               ))}
             </div>
           </div>
@@ -4149,13 +4215,13 @@ function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
                 <div style={{fontSize:7,letterSpacing:1.2,marginTop:1}}>RATING</div>
               </div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:14,fontWeight:900,color:"#fff",
-                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                  {data.motm.displayName}
-                </div>
-                <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:"monospace",marginTop:1}}>
+                <PlayerLink handle={data.motm.handle} name={data.motm.displayName}
+                  style={{display:"block",fontSize:14,fontWeight:900,color:"#fff",
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}/>
+                <PlayerLink handle={data.motm.handle}
+                  style={{display:"block",fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:"monospace",marginTop:1}}>
                   @{data.motm.handle}
-                </div>
+                </PlayerLink>
                 <div style={{
                   display:"inline-block",marginTop:6,fontSize:10,fontWeight:700,
                   padding:"3px 9px",borderRadius:5,
@@ -4224,7 +4290,7 @@ function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:800,color:"#fff",
                         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {e.scorerName}
+                        <PlayerLink handle={e.scorer} name={e.scorerName}/>
                         {evType === "red" && <span style={{color:"#EF4444",marginLeft:5,fontSize:10}}>SENT OFF</span>}
                         {evType === "yellow" && <span style={{color:"#FBBF24",marginLeft:5,fontSize:10}}>BOOKED</span>}
                       </div>
@@ -4234,7 +4300,7 @@ function MatchDetailModal({ match, homeTeam, awayTeam, onClose }: any) {
                           <>
                             <span style={{color:"rgba(255,255,255,0.25)"}}>·</span>
                             <span style={{color:"rgba(255,255,255,0.5)"}}>
-                              🅰 assist: {e.assistName}
+                              🅰 assist: <PlayerLink handle={e.assist} name={e.assistName}/>
                             </span>
                           </>
                         )}
@@ -4666,7 +4732,7 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, onTeamCli
 }
 
 // ─── BRACKET PAGE — SVG tournament map ───────────────────────
-function BracketPage({ teams, onBack, tournament, matches }) {
+function BracketPage({ teams, onBack, tournament, matches, onTeamClick }: any) {
   // ── Layout constants ──────────────────────────────────────
   const SW=1400, SH=710;          // SVG canvas
   const SLW=130, SLH=26, MG=4;   // slot width/height, match gap
@@ -4747,11 +4813,13 @@ function BracketPage({ teams, onBack, tournament, matches }) {
 
   // ── Helpers ───────────────────────────────────────────────
   const Slot = ({x, y, team, gold=false, winner=false}: any) => (
-    <g>
+    <g onClick={() => team && onTeamClick?.(team.id)} style={{cursor: team ? "pointer" : "default"}}>
       <rect x={x} y={y} width={SLW} height={SLH} rx={4}
         fill={winner?"rgba(34,197,94,0.12)" : team ? `${team.color}20` : gold ? "rgba(212,165,55,0.08)" : "rgba(255,255,255,0.06)"}
         stroke={winner?"rgba(34,197,94,0.5)" : team ? team.color+"70" : gold ? "rgba(212,165,55,0.35)" : "rgba(255,255,255,0.14)"}
-        strokeWidth={team ? 1 : 0.6}/>
+        strokeWidth={team ? 1 : 0.6}>
+        {team && <title>{`Click to view ${team.name} squad`}</title>}
+      </rect>
       {team ? <>
         {team.logoImg
           ? <image href={team.logoImg} x={x+3} y={y+2} width={SLH-4} height={SLH-4}/>
@@ -5006,6 +5074,22 @@ const SEED = buildSeedData();
 // ─── MAIN APP (Supabase-powered) ─────────────────────────────
 export default function CTWCApp() {
   const [page,       setPage]       = useState("landing");
+  // Navigation history stack — pushed when user opens a sub-page (e.g.
+  // clicks a team from the bracket). 'Back' pops the last entry instead
+  // of always routing to landing. Capped at 8 entries to avoid leaks.
+  const [navHistory, setNavHistory] = useState<string[]>([]);
+  const navigateTo = (target: string) => {
+    setNavHistory(h => [...h, page].slice(-8));
+    setPage(target);
+  };
+  const navigateBack = (fallback = "landing") => {
+    setNavHistory(h => {
+      if (h.length === 0) { setPage(fallback); return []; }
+      const prev = h[h.length - 1];
+      setPage(prev);
+      return h.slice(0, -1);
+    });
+  };
   const [teams,      setTeams]      = useState<any[]>([]);
   const [pool,       setPool]       = useState<any[]>([]);
   const [claimed,    setClaimed]    = useState<Set<string>>(new Set());
@@ -5411,7 +5495,7 @@ export default function CTWCApp() {
         </div>
       )}
 
-      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} onLeaderboard={()=>setPage("leaderboard")} pool={pool} teams={teams} matches={matchResults} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} tournament={tournament} onTeamClick={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
+      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} onLeaderboard={()=>setPage("leaderboard")} pool={pool} teams={teams} matches={matchResults} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} tournament={tournament} onTeamClick={(id: string)=>{setViewTeamId(id);navigateTo("teamPage");}} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
       {page==="leaderboard" && <LeaderboardPage pool={pool} teams={teams} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="tourneyStats" && <TournamentStatsPage matches={matchResults} teams={teams} pool={pool} myCard={pending} onBack={()=>setPage("tournament")}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
@@ -5435,11 +5519,11 @@ export default function CTWCApp() {
       {page==="teamSetup"   && pending && <TeamSetupPage card={pending} onBrowseTeams={()=>setPage("browseTeams")} onSkip={()=>setPage("pool")}/>}
       {page==="createTeam"  && pending && <CreateTeamPage card={pending} onCreated={handleCreatedTeam} onBack={()=>setPage("browseTeams")}/>}
       {page==="browseTeams" && <BrowseTeamsPage card={pending} teams={teams} onJoined={handleJoinedTeam} onBack={()=>setPage("landing")}/>}
-      {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} tournament={tournament} matches={matchResults} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
+      {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} tournament={tournament} matches={matchResults} onTeamUpdate={handleTeamUpdate} onBack={()=>navigateBack("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
       {page==="pool"        && <PlayerPool pool={pool} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
-      {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
-      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} onStats={()=>setPage("tourneyStats")} onTeamClick={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}
-      {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
+      {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);navigateTo("teamPage");}} onClaim={()=>setPage("connect")}/>}
+      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} onStats={()=>setPage("tourneyStats")} onTeamClick={(id: string)=>{setViewTeamId(id);navigateTo("teamPage");}} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}
+      {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults} onTeamClick={(id: string)=>{setViewTeamId(id);navigateTo("teamPage");}}/>}
 
       {/* Live in-app notifications (e.g. user's team match results) */}
       <NotificationStack
