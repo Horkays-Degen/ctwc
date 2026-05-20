@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
       });
 
       // Award bonus to winner same as normal match (R16 onwards)
-      const ROUND_BONUS_FF: Record<number, number> = { 1: 0, 2: 3, 3: 3, 4: 3, 5: 5 };
+      const ROUND_BONUS_FF: Record<number, number> = { 1: 2, 2: 3, 3: 3, 4: 3, 5: 5 };
       const ffBonus = ROUND_BONUS_FF[round] ?? 0;
       if (ffBonus > 0 && winnerId) {
         const { data: winnerCards } = await supabase
@@ -223,7 +223,9 @@ export async function POST(req: NextRequest) {
     // ── Award progression bonus to the winning team's cards ─────
     // Schedule: R32 win → 0, R16 win → +3, QF win → +3, SF win → +3,
     // Final win → +5. Cumulative across rounds.
-    const ROUND_BONUS: Record<number, number> = { 1: 0, 2: 3, 3: 3, 4: 3, 5: 5 };
+    // Progression bonus per round won. R32 winners now get +2 (was 0).
+    // Cumulative ceiling for a champion: +2 + 3 + 3 + 3 + 5 = +16
+    const ROUND_BONUS: Record<number, number> = { 1: 2, 2: 3, 3: 3, 4: 3, 5: 5 };
     const bonus = ROUND_BONUS[round] ?? 0;
     if (bonus > 0 && result.winnerId) {
       const { data: winnerCards } = await supabase

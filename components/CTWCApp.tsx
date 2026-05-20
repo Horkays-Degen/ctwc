@@ -1950,7 +1950,195 @@ function RegistrationCountdown({ tournament }: any) {
   );
 }
 
-function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool, teams, myCard, onMyTeam, sessionLoading, totalClaimed, tournament }: any) {
+// ─── LIVE TICKER ───────────────────────────────────────────────
+// ESPN-style scrolling marquee. Pulls real match data and generates
+// dynamic items: recent results, fixtures, advancements, eliminations,
+// tournament status. Auto-loops horizontally.
+function LiveTicker({ teams, matches, tournament, onTeamClick, onTournament }: any) {
+  const teamById: Record<string,any> = {};
+  (teams ?? []).forEach((t: any) => { teamById[t.id] = t; });
+
+  const items: { id: string; el: React.ReactNode; clickTeamId?: string }[] = useMemo(() => {
+    const out: { id: string; el: React.ReactNode; clickTeamId?: string }[] = [];
+    const ROUND_SHORT: Record<number, string> = {1:"R32", 2:"R16", 3:"QF", 4:"SF", 5:"F"};
+
+    // Sort matches: completed first (most recent), then scheduled fixtures
+    const allMatches = (matches ?? []) as any[];
+    const done = allMatches.filter(m => m.status === "complete")
+      .sort((a, b) => (b.played_at ?? "").localeCompare(a.played_at ?? ""));
+    const scheduled = allMatches.filter(m => m.status !== "complete")
+      .sort((a, b) => a.round_num - b.round_num || a.match_num - b.match_num);
+
+    // 1. Most recent results (up to 12)
+    done.slice(0, 12).forEach(m => {
+      const home = teamById[m.home_id];
+      const away = teamById[m.away_id];
+      if (!home || !away) return;
+      const data = m.match_data ?? {};
+      out.push({
+        id: `r-${m.id}`,
+        clickTeamId: m.winner_id,
+        el: (
+          <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+            <span style={{color:home.color,fontWeight:800}}>{home.name}</span>
+            <span style={{fontWeight:900,color:"#fff",letterSpacing:0.5}}>
+              {m.home_score}–{m.away_score}
+            </span>
+            <span style={{color:away.color,fontWeight:800}}>{away.name}</span>
+            <span style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.4)",letterSpacing:1.5}}>
+              {ROUND_SHORT[m.round_num] ?? `R${m.round_num}`} · FT{data.forfeit ? " · FORFEIT" : data.bye ? " · BYE" : ""}
+            </span>
+          </span>
+        ),
+      });
+    });
+
+    // 2. Upcoming fixtures (next 8)
+    scheduled.slice(0, 8).forEach(m => {
+      const home = teamById[m.home_id];
+      const away = teamById[m.away_id];
+      if (!home || !away) return;
+      out.push({
+        id: `s-${m.id}`,
+        el: (
+          <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:11}}>⚡</span>
+            <span style={{color:home.color,fontWeight:800}}>{home.name}</span>
+            <span style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.45)",letterSpacing:1}}>VS</span>
+            <span style={{color:away.color,fontWeight:800}}>{away.name}</span>
+            <span style={{fontSize:9,fontWeight:700,color:"#FBBF24",letterSpacing:1.5}}>
+              {ROUND_SHORT[m.round_num] ?? `R${m.round_num}`} · UPCOMING
+            </span>
+          </span>
+        ),
+      });
+    });
+
+    // 3. Winners advanced (most recent round winners)
+    if (done.length > 0) {
+      const lastRound = done[0].round_num;
+      const advancers = done
+        .filter(m => m.round_num === lastRound && m.winner_id)
+        .map(m => teamById[m.winner_id])
+        .filter(Boolean)
+        .slice(0, 6);
+      advancers.forEach((t: any) => {
+        const nextRound = lastRound + 1;
+        const nextLabel = ROUND_SHORT[nextRound];
+        if (!nextLabel) return;
+        out.push({
+          id: `adv-${t.id}`,
+          clickTeamId: t.id,
+          el: (
+            <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
+              <span style={{fontSize:11}}>✅</span>
+              <span style={{color:t.color,fontWeight:800}}>{t.name}</span>
+              <span style={{fontSize:9,fontWeight:700,color:"#22C55E",letterSpacing:1.5}}>
+                ADVANCED TO {nextLabel}
+              </span>
+            </span>
+          ),
+        });
+      });
+    }
+
+    // 4. Tournament status header item (always at the start)
+    if (tournament?.status === "complete" && tournament.champion_id) {
+      const champ = teamById[tournament.champion_id];
+      if (champ) {
+        out.unshift({
+          id: "champion",
+          el: (
+            <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:14}}>🏆</span>
+              <span style={{fontSize:10,fontWeight:800,color:"#FBBF24",letterSpacing:2}}>CTWC CHAMPION:</span>
+              <span style={{color:champ.color,fontWeight:900}}>{champ.name.toUpperCase()}</span>
+            </span>
+          ),
+        });
+      }
+    }
+
+    // If we have NO data at all (pre-tournament), show a placeholder
+    if (out.length === 0) {
+      out.push({
+        id: "placeholder",
+        el: (
+          <span style={{color:"rgba(255,255,255,0.45)",fontWeight:600}}>
+            ⚡ Tournament fixtures revealing soon. Stay tuned.
+          </span>
+        ),
+      });
+    }
+    return out;
+  }, [teams, matches, tournament]);
+
+  // Duplicate items for seamless infinite scroll
+  const itemsLoop = [...items, ...items];
+
+  return (
+    <div style={{
+      position:"relative",zIndex:10,
+      borderTop:"1px solid rgba(212,165,55,0.18)",
+      borderBottom:"1px solid rgba(212,165,55,0.18)",
+      background:"linear-gradient(90deg, rgba(212,165,55,0.05), rgba(0,0,0,0), rgba(212,165,55,0.05))",
+      overflow:"hidden",
+      padding:"11px 0",
+    }}>
+      {/* LIVE badge sticking out on the left */}
+      <div style={{
+        position:"absolute",top:0,bottom:0,left:0,
+        display:"flex",alignItems:"center",
+        padding:"0 14px",zIndex:2,
+        background:"linear-gradient(90deg, #04060d 75%, transparent)",
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:7}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:"#EF4444",
+            boxShadow:"0 0 8px rgba(239,68,68,0.7)",
+            animation:"ppulse 1.4s ease-in-out infinite"}}/>
+          <span style={{fontSize:10,fontWeight:900,letterSpacing:3,color:"#EF4444"}}>LIVE</span>
+        </div>
+      </div>
+
+      {/* Right fade to suggest "more coming" */}
+      <div style={{
+        position:"absolute",top:0,bottom:0,right:0,width:90,zIndex:2,
+        background:"linear-gradient(90deg, transparent, #04060d 70%)",
+      }}/>
+
+      {/* Scrolling content */}
+      <div style={{
+        display:"flex",gap:48,whiteSpace:"nowrap",
+        paddingLeft:90,
+        animation: "tickerScroll 70s linear infinite",
+        willChange:"transform",
+        fontFamily:"'Segoe UI',system-ui,sans-serif",
+        fontSize:13,
+      }}>
+        {itemsLoop.map((it, idx) => (
+          <span key={`${it.id}-${idx}`}
+            onClick={() => { try { SFX.click(); } catch {}; if (it.clickTeamId && onTeamClick) onTeamClick(it.clickTeamId); else onTournament?.(); }}
+            style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:12,flexShrink:0,
+              transition:"opacity 0.18s"}}
+            onMouseEnter={e=>(e.currentTarget.style.opacity="0.7")}
+            onMouseLeave={e=>(e.currentTarget.style.opacity="1")}>
+            {it.el}
+            <span style={{color:"rgba(255,255,255,0.15)",fontSize:14}}>·</span>
+          </span>
+        ))}
+      </div>
+
+      <style>{`
+        @keyframes tickerScroll {
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool, teams, matches, myCard, onMyTeam, sessionLoading, totalClaimed, tournament, onTeamClick }: any) {
   const [hov, setHov] = useState(false);
   const preview = useRef([
     createCard(MOCK_PROFILES[1],"ST"),
@@ -2047,6 +2235,25 @@ function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool
                 <span style={{width:16,height:16,border:"2px solid rgba(0,0,0,0.3)",borderTopColor:"#1a1a1a",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>
                 Loading session...
               </button>
+            ) : myCard && (tournament?.status && tournament.status !== "registration") ? (
+              // Card holder + tournament running: route them to tournament hub
+              // (squad is locked so squad management doesn't matter anymore)
+              <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                <button onClick={()=>{SFX.click();onTournament();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+                  style={{padding:"16px 32px",fontSize:15,fontWeight:700,color:"#1a1a1a",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:12,cursor:"pointer",
+                    boxShadow:hov?"0 0 44px rgba(212,165,55,0.55),0 8px 24px rgba(212,165,55,0.3)":"0 4px 20px rgba(212,165,55,0.22)",
+                    transform:hov?"translateY(-2px)":"translateY(0)",transition:"all 0.25s",display:"inline-flex",alignItems:"center",gap:10}}>
+                  🏆 Watch Tournament
+                </button>
+                <button onClick={()=>{SFX.click();onMyTeam();}}
+                  style={{padding:"16px 22px",fontSize:14,fontWeight:600,color:"rgba(255,255,255,0.8)",
+                    background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:12,cursor:"pointer",
+                    transition:"all 0.18s",display:"inline-flex",alignItems:"center",gap:8}}
+                  onMouseEnter={e=>(e.currentTarget.style.background="rgba(255,255,255,0.08)")}
+                  onMouseLeave={e=>(e.currentTarget.style.background="rgba(255,255,255,0.04)")}>
+                  ⚽ My Squad · OVR {myCard.ovr + (myCard.bonusOvr || 0)}
+                </button>
+              </div>
             ) : myCard ? (
               <button onClick={()=>{SFX.click();onMyTeam();}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
                 style={{padding:"16px 36px",fontSize:15,fontWeight:700,color:"#1a1a1a",background:"linear-gradient(135deg,#FBBF24,#D4A537)",border:"none",borderRadius:12,cursor:"pointer",
@@ -2133,20 +2340,8 @@ function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool
         </div>
       </div>
 
-      {/* ── Teams strip ── */}
-      <div style={{padding:"14px 0",borderBottom:"1px solid rgba(255,255,255,0.04)",overflowX:"auto",position:"relative",zIndex:10}}>
-        <div style={{display:"flex",gap:8,paddingLeft:24,paddingRight:24,width:"max-content"}}>
-          {teams.map(t=>(
-            <div key={t.id} onClick={onTournament} style={{display:"flex",alignItems:"center",gap:7,padding:"7px 13px",borderRadius:9,background:`${t.color}0e`,border:`1px solid ${t.color}22`,cursor:"pointer",flexShrink:0,transition:"all 0.18s"}}
-              onMouseEnter={e=>{e.currentTarget.style.background=`${t.color}22`;e.currentTarget.style.borderColor=`${t.color}44`;}}
-              onMouseLeave={e=>{e.currentTarget.style.background=`${t.color}0e`;e.currentTarget.style.borderColor=`${t.color}22`;}}>
-              <EmblemImg team={t} size={14}/>
-              <span style={{fontSize:10,fontWeight:700,color:t.color,whiteSpace:"nowrap"}}>{t.name}</span>
-              <span style={{fontSize:9,color:"rgba(255,255,255,0.2)"}}>{t.memberIds.length}/11</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* ── Live score ticker ── */}
+      <LiveTicker teams={teams} matches={matches} tournament={tournament} onTeamClick={onTeamClick} onTournament={onTournament}/>
 
       {/* ── Tier legend ── */}
       <div style={{padding:"12px 28px",display:"flex",justifyContent:"center",gap:24,flexWrap:"wrap",position:"relative",zIndex:10}}>
@@ -2637,7 +2832,7 @@ function PositionPickerModal({ team, onPick, onCancel, loading }: any) {
 }
 
 // ─── TEAM PAGE ────────────────────────────────────────────────
-function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBrowse, tournament }: any) {
+function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBrowse, tournament, matches }: any) {
   const [expandCard, setExpandCard]   = useState(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const filled   = team.slots.filter((s: any) => s.card).length;
@@ -2647,6 +2842,36 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
   const amOnTeam = !!myCard;
   // Once the bracket is seeded, squads are frozen — Leave button disappears.
   const squadsLocked = tournament?.status && tournament.status !== "registration";
+
+  // Compute tournament progression status for this team
+  const ROUND_NAMES_TP: Record<number,string> = {1:"Round of 32",2:"Round of 16",3:"Quarter Finals",4:"Semi Finals",5:"Final"};
+  const progression = (() => {
+    const teamMatches = (matches ?? [])
+      .filter((m:any) => m.home_id === team.id || m.away_id === team.id)
+      .sort((a:any,b:any) => b.round_num - a.round_num); // latest first
+    if (teamMatches.length === 0) return null;
+    const champion = tournament?.champion_id === team.id;
+    if (champion) return { kind: "champion" as const, label: "🏆 SQUAD CHAMPIONS · CTWC 2026", color:"#FBBF24", glow:"rgba(212,165,55,0.5)" };
+    const latest = teamMatches[0];
+    if (latest.status !== "complete") {
+      return { kind: "live" as const, label: `LIVE · ${ROUND_NAMES_TP[latest.round_num] ?? "Round " + latest.round_num} fixture pending`, color:"#FBBF24", glow:"rgba(212,165,55,0.4)" };
+    }
+    // Team's latest played match — did they win or lose?
+    const won = latest.winner_id === team.id;
+    if (won) {
+      const nextRound = latest.round_num + 1;
+      if (nextRound > 5) {
+        return { kind: "champion" as const, label: "🏆 SQUAD CHAMPIONS · CTWC 2026", color:"#FBBF24", glow:"rgba(212,165,55,0.5)" };
+      }
+      return { kind: "advanced" as const,
+        label: `✅ ADVANCED · ${ROUND_NAMES_TP[nextRound] ?? "Next Round"}`,
+        color:"#22C55E", glow:"rgba(34,197,94,0.4)" };
+    } else {
+      return { kind: "eliminated" as const,
+        label: `❌ SQUAD ELIMINATED · ${ROUND_NAMES_TP[latest.round_num] ?? "Round " + latest.round_num}`,
+        color:"#EF4444", glow:"rgba(239,68,68,0.4)" };
+    }
+  })();
 
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -2698,7 +2923,24 @@ function TeamPage({ team, myCardId, onTeamUpdate, onBack, onPool, onLeave, onBro
           </div>
         </div>
 
-        {filled===11&&<div style={{padding:"12px 18px",background:"rgba(16,185,129,0.08)",border:"1px solid rgba(16,185,129,0.2)",borderRadius:10,fontSize:13,color:"#10B981",fontWeight:600,marginBottom:20,textAlign:"center"}}>⚽ Squad Complete — Ready for Tournaments!</div>}
+        {/* Tournament status banner — eliminated, advanced, champion, or pre-tournament */}
+        {progression ? (
+          <div style={{
+            padding:"14px 22px",borderRadius:12,marginBottom:20,
+            background:`linear-gradient(90deg, ${progression.color}10, ${progression.color}20, ${progression.color}10)`,
+            border:`1.5px solid ${progression.color}66`,
+            fontSize:14,color:progression.color,fontWeight:800,letterSpacing:1.5,
+            textAlign:"center",textTransform:"uppercase",
+            boxShadow:`0 0 26px ${progression.glow}`,
+            animation: progression.kind === "champion" ? "ppulse 2s ease-in-out infinite" : "none",
+          }}>
+            {progression.label}
+          </div>
+        ) : filled===11 && (
+          <div style={{padding:"12px 18px",background:"rgba(16,185,129,0.08)",border:"1px solid rgba(16,185,129,0.2)",borderRadius:10,fontSize:13,color:"#10B981",fontWeight:600,marginBottom:20,textAlign:"center"}}>
+            ⚽ Squad Complete — Awaiting Tournament Kickoff
+          </div>
+        )}
 
         <div style={{display:"flex",gap:24,flexWrap:"wrap",alignItems:"flex-start"}}>
           {/* Pitch */}
@@ -4097,7 +4339,7 @@ function AdminPanel({ tournament, onSeed, onSimulate, onDeadline, loading }: any
 }
 
 // ─── TOURNAMENT PAGE — overview + current round ───────────────
-function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, tournament, matches, onAdminSeed, onAdminSimulate, onAdminDeadline, adminLoading }: any) {
+function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, onTeamClick, tournament, matches, onAdminSeed, onAdminSimulate, onAdminDeadline, adminLoading }: any) {
   const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const totalFilled = teams.reduce((s,t)=>s+t.memberIds.length,0);
   const totalSlots  = teams.length * 11;
@@ -4276,12 +4518,10 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, tournamen
                 const hc      = home?.color || "#3B82F6";
                 const ac      = away?.color || "#EF4444";
                 return (
-                  <div key={m.id} onClick={()=>done&&setSelectedMatch(m)}
-                    style={{position:"relative",borderRadius:14,overflow:"hidden",cursor:done?"pointer":"default",transition:"transform 0.18s,box-shadow 0.18s",
+                  <div key={m.id}
+                    style={{position:"relative",borderRadius:14,overflow:"hidden",transition:"transform 0.18s,box-shadow 0.18s",
                       border:`1px solid ${done?(winHome?`${hc}44`:(winAway?`${ac}44`:"rgba(34,197,94,0.15)")):"rgba(255,255,255,0.07)"}`,
-                      background:"#0d1117"}}
-                    onMouseEnter={e=>{if(done){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 8px 32px rgba(0,0,0,0.4)`;} }}
-                    onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="none";}}>
+                      background:"#0d1117"}}>
 
                     {/* Team color bleed background */}
                     <div style={{position:"absolute",inset:0,background:`linear-gradient(90deg,${hc}12 0%,transparent 42%,transparent 58%,${ac}12 100%)`,pointerEvents:"none"}}/>
@@ -4292,9 +4532,12 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, tournamen
                       {done && <span style={{color:"#22C55E",letterSpacing:0.5}}>FT{penalty?" · PENS":""}</span>}
                     </div>
 
-                    {/* Home row */}
-                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderBottom:"1px solid rgba(255,255,255,0.04)",position:"relative",
-                      background:winHome?`${hc}12`:"transparent"}}>
+                    {/* Home row — clicking team opens its squad page */}
+                    <div onClick={() => home && onTeamClick?.(home.id)}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderBottom:"1px solid rgba(255,255,255,0.04)",position:"relative",cursor:home?"pointer":"default",
+                        background:winHome?`${hc}12`:"transparent",transition:"background 0.18s"}}
+                      onMouseEnter={e=>{ if (home) e.currentTarget.style.background = `${hc}22`; }}
+                      onMouseLeave={e=>{ e.currentTarget.style.background = winHome ? `${hc}12` : "transparent"; }}>
                       {home ? (
                         <>
                           <div style={{width:30,height:30,borderRadius:8,background:hc,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
@@ -4312,9 +4555,12 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, tournamen
                       ) : <span style={{fontSize:11,color:"rgba(255,255,255,0.18)",fontStyle:"italic"}}>TBD</span>}
                     </div>
 
-                    {/* Away row */}
-                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",position:"relative",
-                      background:winAway?`${ac}12`:"transparent"}}>
+                    {/* Away row — clicking team opens its squad page */}
+                    <div onClick={() => away && onTeamClick?.(away.id)}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",position:"relative",cursor:away?"pointer":"default",
+                        background:winAway?`${ac}12`:"transparent",transition:"background 0.18s"}}
+                      onMouseEnter={e=>{ if (away) e.currentTarget.style.background = `${ac}22`; }}
+                      onMouseLeave={e=>{ e.currentTarget.style.background = winAway ? `${ac}12` : "transparent"; }}>
                       {away ? (
                         <>
                           <div style={{width:30,height:30,borderRadius:8,background:ac,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
@@ -4332,7 +4578,17 @@ function TournamentPage({ teams, onBack, onBrowse, onBracket, onStats, tournamen
                       ) : <span style={{fontSize:11,color:"rgba(255,255,255,0.18)",fontStyle:"italic"}}>TBD</span>}
                     </div>
 
-                    {done && <div style={{fontSize:8,color:"rgba(255,255,255,0.18)",textAlign:"center",padding:"5px 0",letterSpacing:1,textTransform:"uppercase",borderTop:"1px solid rgba(255,255,255,0.04)",position:"relative"}}>View match report →</div>}
+                    {/* Dedicated match report button — opens the modal */}
+                    {done && (
+                      <div onClick={() => setSelectedMatch(m)}
+                        style={{fontSize:10,fontWeight:700,color:"#FBBF24",textAlign:"center",padding:"8px 0",letterSpacing:1.5,textTransform:"uppercase",
+                          borderTop:"1px solid rgba(212,165,55,0.18)",position:"relative",cursor:"pointer",
+                          background:"rgba(212,165,55,0.04)",transition:"background 0.18s"}}
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(212,165,55,0.12)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "rgba(212,165,55,0.04)")}>
+                        📊 View Match Report
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -5155,7 +5411,7 @@ export default function CTWCApp() {
         </div>
       )}
 
-      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} onLeaderboard={()=>setPage("leaderboard")} pool={pool} teams={teams} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} tournament={tournament} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
+      {page==="landing"     && <Landing onConnect={()=>setPage("connect")} onPool={()=>setPage("pool")} onTeams={()=>setPage("teamsList")} onTournament={()=>setPage("tournament")} onLeaderboard={()=>setPage("leaderboard")} pool={pool} teams={teams} matches={matchResults} myCard={pending} sessionLoading={sessionLoading} totalClaimed={claimed.size} tournament={tournament} onTeamClick={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onMyTeam={()=>{ if(viewTeamId){ setPage("teamPage"); } else { setPage("teamSetup"); } }}/>}
       {page==="leaderboard" && <LeaderboardPage pool={pool} teams={teams} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="tourneyStats" && <TournamentStatsPage matches={matchResults} teams={teams} pool={pool} myCard={pending} onBack={()=>setPage("tournament")}/>}
       {page==="connect"     && <ConnectPage onBack={()=>setPage("landing")}/>}
@@ -5179,10 +5435,10 @@ export default function CTWCApp() {
       {page==="teamSetup"   && pending && <TeamSetupPage card={pending} onBrowseTeams={()=>setPage("browseTeams")} onSkip={()=>setPage("pool")}/>}
       {page==="createTeam"  && pending && <CreateTeamPage card={pending} onCreated={handleCreatedTeam} onBack={()=>setPage("browseTeams")}/>}
       {page==="browseTeams" && <BrowseTeamsPage card={pending} teams={teams} onJoined={handleJoinedTeam} onBack={()=>setPage("landing")}/>}
-      {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} tournament={tournament} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
+      {page==="teamPage"    && viewTeam && <TeamPage team={viewTeam} myCardId={myCardId} tournament={tournament} matches={matchResults} onTeamUpdate={handleTeamUpdate} onBack={()=>setPage("landing")} onPool={()=>setPage("pool")} onLeave={handleLeaveTeam} onBrowse={()=>setPage("browseTeams")}/>}
       {page==="pool"        && <PlayerPool pool={pool} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onClaim={()=>setPage("connect")}/>}
       {page==="teamsList"   && <TeamsListPage teams={teams} myCard={pending} tournament={tournament} onBack={()=>setPage("landing")} onViewTeam={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} onClaim={()=>setPage("connect")}/>}
-      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} onStats={()=>setPage("tourneyStats")} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}
+      {page==="tournament"  && <TournamentPage teams={teams} onBack={()=>setPage("landing")} onBrowse={()=>setPage("browseTeams")} onBracket={()=>setPage("bracket")} onStats={()=>setPage("tourneyStats")} onTeamClick={(id: string)=>{setViewTeamId(id);setPage("teamPage");}} tournament={tournament} matches={matchResults} onAdminSeed={handleAdminSeed} onAdminSimulate={handleAdminSimulate} onAdminDeadline={handleAdminDeadline} adminLoading={adminLoading}/>}
       {page==="bracket"     && <BracketPage teams={teams} onBack={()=>setPage("tournament")} tournament={tournament} matches={matchResults}/>}
 
       {/* Live in-app notifications (e.g. user's team match results) */}

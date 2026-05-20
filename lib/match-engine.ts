@@ -296,7 +296,7 @@ export function simulateMatch(
   // Yellow card distribution: avg 2.5 per team per match
   const homeYellows = Math.min(poisson(2.5, rand), 6);
   const awayYellows = Math.min(poisson(2.5, rand), 6);
-  // Red cards are rare — ~8% chance per team per match
+  // Red cards (direct/straight) are rare — ~8% chance per team per match
   const homeReds = rand() < 0.08 ? 1 : 0;
   const awayReds = rand() < 0.08 ? 1 : 0;
 
@@ -306,29 +306,71 @@ export function simulateMatch(
     team: "home" | "away"
   ): GoalEvent[] => {
     const out: GoalEvent[] = [];
-    for (let i = 0; i < yellows; i++) {
-      const p = pickCardTaker(slots);
-      if (!p) continue;
-      out.push({
-        minute: 5 + Math.floor(rand() * 85),
-        team, type: "yellow",
-        scorer: p.handle, scorerName: p.name,
-      });
-    }
+    // Track per-player yellow count + dismissal so we obey football rules:
+    //   1 yellow = warning
+    //   2nd yellow = automatic red (player sent off, can't get more cards)
+    //   Direct red = sent off (no more cards either)
+    const playerState: Record<string, { yellows: number; sentOff: boolean }> = {};
+
+    // Process direct reds first (they happen randomly throughout the match)
     for (let i = 0; i < reds; i++) {
       const p = pickCardTaker(slots);
       if (!p) continue;
+      // Don't give a direct red to a player already sent off
+      const st = playerState[p.handle] ?? { yellows: 0, sentOff: false };
+      if (st.sentOff) continue;
+      st.sentOff = true;
+      playerState[p.handle] = st;
       out.push({
         minute: 30 + Math.floor(rand() * 60),
         team, type: "red",
         scorer: p.handle, scorerName: p.name,
       });
     }
+
+    // Now distribute yellows, respecting send-off rules
+    let yellowsLeft = yellows;
+    let attempts = 0;
+    while (yellowsLeft > 0 && attempts < yellows * 4) {
+      attempts++;
+      const p = pickCardTaker(slots);
+      if (!p) break;
+      const st = playerState[p.handle] ?? { yellows: 0, sentOff: false };
+      if (st.sentOff) continue;          // can't book a sent-off player
+      if (st.yellows >= 2) continue;     // already on 2 yellows (impossible — they'd be sent off)
+
+      const minute = 5 + Math.floor(rand() * 85);
+      st.yellows += 1;
+      out.push({
+        minute, team, type: "yellow",
+        scorer: p.handle, scorerName: p.name,
+      });
+      if (st.yellows === 2) {
+        // Second yellow → automatic red. Add red event ~1 minute later.
+        st.sentOff = true;
+        out.push({
+          minute: Math.min(90, minute + 1),
+          team, type: "red",
+          scorer: p.handle, scorerName: p.name,
+        });
+      }
+      playerState[p.handle] = st;
+      yellowsLeft--;
+    }
     return out;
   };
 
   const homeCardEvents = makeCardEvents(homeSlots, homeYellows, homeReds, "home");
   const awayCardEvents = makeCardEvents(awaySlots, awayYellows, awayReds, "away");
+
+  // Recompute aggregate counts from actual events (some yellows may have been
+  // dropped if all eligible players already had 2 yellows / direct reds)
+  const countByType = (evs: GoalEvent[], team: "home" | "away", type: string) =>
+    evs.filter(e => e.team === team && e.type === type).length;
+  const homeYellowsActual = countByType(homeCardEvents, "home", "yellow");
+  const homeRedsActual    = countByType(homeCardEvents, "home", "red");
+  const awayYellowsActual = countByType(awayCardEvents, "away", "yellow");
+  const awayRedsActual    = countByType(awayCardEvents, "away", "red");
 
   const events: GoalEvent[] = [
     ...homeMinutes.map((m, i) => {
@@ -419,8 +461,8 @@ export function simulateMatch(
     shotsOnTarget: homeOnTarget,
     possession:    homePoss,
     saves:         homeSaves,
-    yellowCards:   homeYellows,
-    redCards:      homeReds,
+    yellowCards:   homeYellowsActual,
+    redCards:      homeRedsActual,
     passAccuracy:  Math.min(95, homePassAcc),
   };
   const awayStats: TeamMatchStats = {
@@ -428,8 +470,8 @@ export function simulateMatch(
     shotsOnTarget: awayOnTarget,
     possession:    awayPoss,
     saves:         awaySaves,
-    yellowCards:   awayYellows,
-    redCards:      awayReds,
+    yellowCards:   awayYellowsActual,
+    redCards:      awayRedsActual,
     passAccuracy:  Math.min(95, awayPassAcc),
   };
 
