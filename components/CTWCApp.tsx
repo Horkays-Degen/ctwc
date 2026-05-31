@@ -1875,6 +1875,63 @@ const ROUND_LABELS: Record<number, string> = {
 //   registration  → counts down to registration deadline
 //   seeded/active → counts down to next round simulate
 //   complete      → shows champion (no banner)
+// ─── LIVE BROADCAST BANNER ────────────────────────────────────
+// Appears at the very top of the landing page when a live match
+// broadcast is active (QF/SF/Final simulate fired and we're within
+// the playback window). Routes to /watch.
+function LiveBroadcastBanner({ tournament }: any) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const active = tournament?.broadcast_active && tournament?.broadcast_started_at;
+  if (!active) return null;
+  const startMs = new Date(tournament.broadcast_started_at).getTime();
+  const elapsedS = (now - startMs) / 1000;
+  // Default to 4 matches × 6 min cycle ≈ 24 min. Hide once we're past that
+  // plus 2 min buffer.
+  const ROUND_MATCH_COUNT: Record<number,number> = {3:4, 4:2, 5:1};
+  const matchCount = ROUND_MATCH_COUNT[tournament.broadcast_round ?? 0] ?? 4;
+  const totalWindowS = matchCount * 360 + 120;
+  if (elapsedS < 0 || elapsedS > totalWindowS) return null;
+  const ROUND_NAMES: Record<number,string> = {3:"QUARTER FINAL", 4:"SEMI FINAL", 5:"GRAND FINAL"};
+  const roundName = ROUND_NAMES[tournament.broadcast_round ?? 0] ?? "LIVE MATCH";
+
+  return (
+    <a href="/watch" style={{
+      position:"relative",zIndex:30,display:"block",textDecoration:"none",
+      padding:"12px 28px",
+      background:"linear-gradient(90deg, rgba(239,68,68,0.5), rgba(239,68,68,0.2) 30%, rgba(239,68,68,0.2) 70%, rgba(239,68,68,0.5))",
+      borderBottom:"1px solid rgba(239,68,68,0.55)",
+      animation:"livePulse 2.5s ease-in-out infinite",
+    }}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:14,flexWrap:"wrap",
+        fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+        <div style={{display:"flex",alignItems:"center",gap:7}}>
+          <div style={{width:10,height:10,borderRadius:"50%",background:"#fff",
+            boxShadow:"0 0 12px rgba(255,255,255,0.9)",animation:"ppulse 1s ease-in-out infinite"}}/>
+          <span style={{fontSize:12,fontWeight:900,letterSpacing:3,color:"#fff"}}>● LIVE NOW</span>
+        </div>
+        <span style={{fontSize:13,fontWeight:800,letterSpacing:2,color:"#fff"}}>
+          {roundName} BROADCASTING
+        </span>
+        <span style={{display:"inline-flex",alignItems:"center",gap:7,
+          padding:"6px 14px",borderRadius:8,
+          background:"#fff",color:"#EF4444",fontSize:12,fontWeight:900,letterSpacing:2}}>
+          📺 WATCH LIVE →
+        </span>
+      </div>
+      <style>{`
+        @keyframes livePulse {
+          0%, 100% { background: linear-gradient(90deg, rgba(239,68,68,0.5), rgba(239,68,68,0.2) 30%, rgba(239,68,68,0.2) 70%, rgba(239,68,68,0.5)); }
+          50%      { background: linear-gradient(90deg, rgba(239,68,68,0.7), rgba(239,68,68,0.35) 30%, rgba(239,68,68,0.35) 70%, rgba(239,68,68,0.7)); }
+        }
+      `}</style>
+    </a>
+  );
+}
+
 function RegistrationCountdown({ tournament }: any) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -2215,6 +2272,7 @@ function Landing({ onConnect, onPool, onTeams, onTournament, onLeaderboard, pool
       </header>
 
       {/* ── Registration deadline countdown ── */}
+      <LiveBroadcastBanner tournament={tournament}/>
       <RegistrationCountdown tournament={tournament}/>
 
       {/* ── Hero ── */}

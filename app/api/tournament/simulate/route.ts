@@ -258,12 +258,27 @@ export async function POST(req: NextRequest) {
   // ── Advance to next round ──────────────────────────────────
   const nextRound = round + 1;
 
+  // ── Live broadcast: round 3 (QF) onwards is a synchronized event ──
+  // Anyone on /watch sees matches play out in real time over ~6 min/match.
+  // broadcast_started_at is the wall-clock reference point clients use to
+  // compute which match is currently playing + the simulated minute.
+  const isLiveBroadcastRound = round >= 3;
+
   if (nextRound > 5) {
     // All rounds done — mark champion
     const finalMatch = results.find(r => r.matchNum === 1);
     await supabase
       .from("tournament")
-      .update({ status: "complete", champion_id: finalMatch?.winnerId ?? null })
+      .update({
+        status: "complete",
+        champion_id: finalMatch?.winnerId ?? null,
+        // Also broadcast the final
+        ...(isLiveBroadcastRound ? {
+          broadcast_started_at: new Date().toISOString(),
+          broadcast_round:      round,
+          broadcast_active:     true,
+        } : {}),
+      })
       .eq("id", tournament.id);
 
     return NextResponse.json({
@@ -273,6 +288,7 @@ export async function POST(req: NextRequest) {
       message: "Tournament complete!",
       champion: finalMatch?.winnerId,
       isFinal: true,
+      broadcast: isLiveBroadcastRound,
     });
   }
 
@@ -307,10 +323,18 @@ export async function POST(req: NextRequest) {
       .upsert(nextMatchInserts, { onConflict: "round_num,match_num", ignoreDuplicates: true });
   }
 
-  // Update tournament round
+  // Update tournament round + (for QF+) trigger the live broadcast window
   await supabase
     .from("tournament")
-    .update({ current_round: nextRound, status: "active" })
+    .update({
+      current_round: nextRound,
+      status:        "active",
+      ...(isLiveBroadcastRound ? {
+        broadcast_started_at: new Date().toISOString(),
+        broadcast_round:      round,
+        broadcast_active:     true,
+      } : {}),
+    })
     .eq("id", tournament.id);
 
   return NextResponse.json({
@@ -319,6 +343,7 @@ export async function POST(req: NextRequest) {
     round,
     nextRound,
     isFinal: false,
+    broadcast: isLiveBroadcastRound,
     statsRefreshed: !!process.env.X_API_BEARER_TOKEN,
     message: `Round ${round} complete. Moving to round ${nextRound}.`,
   });
