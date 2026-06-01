@@ -1889,11 +1889,11 @@ function LiveBroadcastBanner({ tournament }: any) {
   if (!active) return null;
   const startMs = new Date(tournament.broadcast_started_at).getTime();
   const elapsedS = (now - startMs) / 1000;
-  // Default to 4 matches × 6 min cycle ≈ 24 min. Hide once we're past that
-  // plus 2 min buffer.
-  const ROUND_MATCH_COUNT: Record<number,number> = {3:4, 4:2, 5:1};
+  // Each match cycle is 110s (5s preshow + 90s play + 15s recap).
+  // Hide once we're past total window + 60s buffer.
+  const ROUND_MATCH_COUNT: Record<number,number> = {2:8, 3:4, 4:2, 5:1};
   const matchCount = ROUND_MATCH_COUNT[tournament.broadcast_round ?? 0] ?? 4;
-  const totalWindowS = matchCount * 360 + 120;
+  const totalWindowS = matchCount * 110 + 60;
   if (elapsedS < 0 || elapsedS > totalWindowS) return null;
   const ROUND_NAMES: Record<number,string> = {3:"QUARTER FINAL", 4:"SEMI FINAL", 5:"GRAND FINAL"};
   const roundName = ROUND_NAMES[tournament.broadcast_round ?? 0] ?? "LIVE MATCH";

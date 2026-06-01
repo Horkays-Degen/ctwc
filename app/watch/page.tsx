@@ -121,10 +121,14 @@ function startAmbience(): { stop: () => void } {
 }
 
 // ─── Timing constants ─────────────────────────────────────────
-const PRE_SHOW_S    = 15;
-const MATCH_PLAY_S  = 300;
-const MATCH_RECAP_S = 45;
-const MATCH_CYCLE_S = PRE_SHOW_S + MATCH_PLAY_S + MATCH_RECAP_S; // 360s
+// Tight, broadcast-paced. 1 simulated minute = 1 real second so a full
+// 90-minute match plays in 90s. Per-match cycle:
+//   5s preshow  → 90s live play → 15s recap = 110s total per match
+// For QF (4 matches): ~7.3 min. For R16 (8): ~14.7 min. Final (1): ~2 min.
+const PRE_SHOW_S    = 5;
+const MATCH_PLAY_S  = 90;
+const MATCH_RECAP_S = 15;
+const MATCH_CYCLE_S = PRE_SHOW_S + MATCH_PLAY_S + MATCH_RECAP_S; // 110s
 
 // ─── Types ────────────────────────────────────────────────────
 interface Team   { id: string; name: string; color: string; emblem: string; logo_img?: string | null; }
@@ -265,11 +269,11 @@ export default function WatchPage() {
       const key = `${m.id}-${e.minute}-${e.type ?? "goal"}-${e.scorer}`;
       if (triggeredSounds.current.has(key)) continue;
       triggeredSounds.current.add(key);
-      // Wider window (8s) so we don't miss sounds if a render tick is delayed,
-      // but still suppress events that happened minutes ago when a viewer joined late.
+      // 3s tolerance: 1 simulated minute = 1 real second now, so events are
+      // tightly packed. Anything older than 3s is "stale" (late-joiner skip).
       const expectedRealS = PRE_SHOW_S + (e.minute / 90) * MATCH_PLAY_S;
       const actualRealS   = playback.matchInS ?? 0;
-      if (Math.abs(actualRealS - expectedRealS) > 8) continue;
+      if (Math.abs(actualRealS - expectedRealS) > 3) continue;
       const t = e.type ?? "goal";
       try {
         if (t === "goal")   crowdRoar(1);
