@@ -86,6 +86,40 @@ function tick() {
   o.start(); o.stop(c.currentTime + 0.05);
 }
 
+// Ambient stadium murmur — continuous low-volume crowd noise during a match.
+// Returns a stopper that fades out smoothly. Layered bandpass filters give
+// that hushed-stadium-on-TV feel without overpowering the goal celebrations.
+function startAmbience(): { stop: () => void } {
+  const c = ctx(); buildNoise();
+  if (!c || !_noiseBuf) return { stop: () => {} };
+  const sources: AudioBufferSourceNode[] = [];
+  const gains: GainNode[] = [];
+  // Three voice layers: low rumble, mid voices, faint highs
+  [{f:120,q:1.5,vol:0.07},{f:400,q:1.6,vol:0.05},{f:1200,q:1.4,vol:0.03}].forEach(({f,q,vol}) => {
+    const src = c.createBufferSource(); src.buffer = _noiseBuf!; src.loop = true;
+    const flt = c.createBiquadFilter(); flt.type = "bandpass"; flt.frequency.value = f; flt.Q.value = q;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, c.currentTime);
+    g.gain.linearRampToValueAtTime(vol, c.currentTime + 1.5);
+    src.connect(flt); flt.connect(g); g.connect(c.destination);
+    src.start();
+    sources.push(src);
+    gains.push(g);
+  });
+  return {
+    stop: () => {
+      try {
+        gains.forEach(g => {
+          g.gain.cancelScheduledValues(c.currentTime);
+          g.gain.setValueAtTime(g.gain.value, c.currentTime);
+          g.gain.linearRampToValueAtTime(0, c.currentTime + 0.5);
+        });
+        sources.forEach(src => { try { src.stop(c.currentTime + 0.6); } catch {} });
+      } catch {}
+    },
+  };
+}
+
 // ─── Timing constants ─────────────────────────────────────────
 const PRE_SHOW_S    = 15;
 const MATCH_PLAY_S  = 300;
@@ -231,19 +265,71 @@ export default function WatchPage() {
       const key = `${m.id}-${e.minute}-${e.type ?? "goal"}-${e.scorer}`;
       if (triggeredSounds.current.has(key)) continue;
       triggeredSounds.current.add(key);
-      // Only fire if we're WITHIN ~3s of the event's simulated minute
-      // (avoids firing sounds for events already passed when client joins late)
+      // Wider window (8s) so we don't miss sounds if a render tick is delayed,
+      // but still suppress events that happened minutes ago when a viewer joined late.
       const expectedRealS = PRE_SHOW_S + (e.minute / 90) * MATCH_PLAY_S;
       const actualRealS   = playback.matchInS ?? 0;
-      if (Math.abs(actualRealS - expectedRealS) > 4) continue;
+      if (Math.abs(actualRealS - expectedRealS) > 8) continue;
       const t = e.type ?? "goal";
       try {
         if (t === "goal")   crowdRoar(1);
         if (t === "yellow") whistle(true);
-        if (t === "red")    crowdRoar(0.5);
+        if (t === "red")    { crowdRoar(0.5); setTimeout(() => whistle(false), 250); }
       } catch {}
     }
   }, [audioOK, playback?.simulatedMinute, playback?.matchIndex, playback?.phase]);
+
+  // ── Whistle markers: kickoff, halftime, full-time ──────────────
+  const whistleMarkers = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!audioOK || !playback || playback.phase !== "playing") return;
+    const m = playback.match!;
+    const min = playback.simulatedMinute;
+    const matchKey = (label: string) => `${m.id}-${label}`;
+    try {
+      // Kickoff whistle once we enter the match (min just after 0)
+      if (min >= 0.5 && min < 1.5 && !whistleMarkers.current.has(matchKey("ko"))) {
+        whistleMarkers.current.add(matchKey("ko"));
+        whistle(false);
+      }
+      // Halftime whistle (around minute 45)
+      if (min >= 45 && min < 46 && !whistleMarkers.current.has(matchKey("ht"))) {
+        whistleMarkers.current.add(matchKey("ht"));
+        whistle(false);
+      }
+      // Full-time triple whistle (around minute 90)
+      if (min >= 89.5 && !whistleMarkers.current.has(matchKey("ft"))) {
+        whistleMarkers.current.add(matchKey("ft"));
+        whistle(false);
+        setTimeout(() => whistle(false), 240);
+        setTimeout(() => whistle(false), 480);
+        setTimeout(() => crowdRoar(0.6), 600);
+      }
+    } catch {}
+  }, [audioOK, playback?.simulatedMinute, playback?.matchIndex, playback?.phase]);
+
+  // ── Ambient crowd ambience during play (continuous low murmur) ──
+  // Long fade-in/out so it doesn't feel mechanical. Restarts each match.
+  const ambientRef = useRef<{ stop: () => void } | null>(null);
+  useEffect(() => {
+    if (!audioOK) return;
+    if (playback?.phase === "playing") {
+      if (!ambientRef.current) {
+        ambientRef.current = startAmbience();
+      }
+    } else {
+      if (ambientRef.current) {
+        ambientRef.current.stop();
+        ambientRef.current = null;
+      }
+    }
+    return () => {
+      if (ambientRef.current) {
+        ambientRef.current.stop();
+        ambientRef.current = null;
+      }
+    };
+  }, [audioOK, playback?.phase, playback?.matchIndex]);
 
   // ─── Render ─────────────────────────────────────────────────
   if (!tournament) return <FullScreen><Loading/></FullScreen>;
