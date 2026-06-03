@@ -10,6 +10,12 @@ import { refreshCardStats } from "@/lib/refresh-stats";
 
 const ADMIN_PIN = process.env.ADMIN_PIN ?? "ctwc2026";
 
+// Live broadcast starts this many ms AFTER the admin clicks Simulate.
+// Workflow: admin clicks ~5 min before the announced match time, the
+// results compute + deploy settles, and the synced /watch playback begins
+// exactly at the announced time. Tunable via BROADCAST_DELAY_MIN env var.
+const BROADCAST_DELAY_MS = (parseInt(process.env.BROADCAST_DELAY_MIN ?? "5", 10)) * 60 * 1000;
+
 export async function POST(req: NextRequest) {
   if (req.headers.get("x-admin-pin") !== ADMIN_PIN) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
@@ -263,6 +269,9 @@ export async function POST(req: NextRequest) {
   // broadcast_started_at is the wall-clock reference point clients use to
   // compute which match is currently playing + the simulated minute.
   const isLiveBroadcastRound = round >= 3;
+  // Broadcast begins BROADCAST_DELAY_MS in the future (default +5 min).
+  // Clients see a "STARTING AT HH:MM" countdown until then, then playback runs.
+  const broadcastStartIso = new Date(Date.now() + BROADCAST_DELAY_MS).toISOString();
 
   if (nextRound > 5) {
     // All rounds done — mark champion
@@ -272,9 +281,9 @@ export async function POST(req: NextRequest) {
       .update({
         status: "complete",
         champion_id: finalMatch?.winnerId ?? null,
-        // Also broadcast the final
+        // Also broadcast the final (delayed start)
         ...(isLiveBroadcastRound ? {
-          broadcast_started_at: new Date().toISOString(),
+          broadcast_started_at: broadcastStartIso,
           broadcast_round:      round,
           broadcast_active:     true,
         } : {}),
@@ -323,17 +332,21 @@ export async function POST(req: NextRequest) {
       .upsert(nextMatchInserts, { onConflict: "round_num,match_num", ignoreDuplicates: true });
   }
 
-  // Update tournament round + (for QF+) trigger the live broadcast window
+  // Update tournament round + (for QF+) trigger the live broadcast window.
+  // Auto-clean: non-broadcast rounds explicitly set broadcast_active=false so
+  // a stale flag from a prior round never lingers.
   await supabase
     .from("tournament")
     .update({
       current_round: nextRound,
       status:        "active",
       ...(isLiveBroadcastRound ? {
-        broadcast_started_at: new Date().toISOString(),
+        broadcast_started_at: broadcastStartIso,
         broadcast_round:      round,
         broadcast_active:     true,
-      } : {}),
+      } : {
+        broadcast_active: false,
+      }),
     })
     .eq("id", tournament.id);
 

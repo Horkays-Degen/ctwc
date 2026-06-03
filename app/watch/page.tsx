@@ -365,6 +365,10 @@ export default function WatchPage() {
 
       <BroadcastHeader viewers={presence} round={broadcastRound}/>
 
+      {playback?.phase === "warmup" && (
+        <PreBroadcastCountdown startMs={startMs!} now={now} round={broadcastRound}
+          matchCount={broadcastMatches.length}/>
+      )}
       {playback?.phase === "preshow" && playback.match && (
         <PreShow
           match={playback.match}
@@ -416,6 +420,42 @@ function FullScreen({ children }: any) {
 function Loading() {
   return (
     <div style={{color:"rgba(255,255,255,0.5)",fontSize:14,letterSpacing:3}}>LOADING…</div>
+  );
+}
+
+// Shown when broadcast_started_at is in the future (5-min warmup window).
+// Big "STARTING IN MM:SS" countdown so early-arrivers know when kickoff is.
+function PreBroadcastCountdown({ startMs, now, round, matchCount }:
+  { startMs: number; now: number; round: number | null; matchCount: number }) {
+  const remainingS = Math.max(0, Math.ceil((startMs - now) / 1000));
+  const mm = String(Math.floor(remainingS / 60)).padStart(2, "0");
+  const ss = String(remainingS % 60).padStart(2, "0");
+  const ROUND_LABELS: Record<number,string> = {3:"QUARTER FINALS", 4:"SEMI FINALS", 5:"GRAND FINAL"};
+  const roundName = round ? (ROUND_LABELS[round] ?? `ROUND ${round}`) : "LIVE MATCHES";
+  const startTime = new Date(startMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <div style={{textAlign:"center",position:"relative",zIndex:5}}>
+      <div style={{display:"inline-flex",alignItems:"center",gap:10,marginBottom:26,
+        padding:"8px 18px",borderRadius:22,background:"rgba(239,68,68,0.16)",border:"1.5px solid rgba(239,68,68,0.5)"}}>
+        <div style={{width:9,height:9,borderRadius:"50%",background:"#EF4444",
+          boxShadow:"0 0 10px rgba(239,68,68,0.7)",animation:"ppulse 1.1s infinite"}}/>
+        <span style={{fontSize:12,fontWeight:900,letterSpacing:4,color:"#EF4444"}}>{roundName} · STARTING SOON</span>
+      </div>
+      <div style={{fontSize:18,fontWeight:700,letterSpacing:4,color:"rgba(255,255,255,0.5)",marginBottom:24}}>
+        BROADCAST BEGINS IN
+      </div>
+      <div style={{fontSize:180,fontWeight:900,color:"#FBBF24",letterSpacing:-4,lineHeight:1,
+        fontVariantNumeric:"tabular-nums",
+        textShadow:"0 0 60px rgba(212,165,55,0.6)"}}>
+        {mm}:{ss}
+      </div>
+      <div style={{marginTop:30,fontSize:14,letterSpacing:3,color:"rgba(255,255,255,0.5)"}}>
+        {matchCount} {matchCount === 1 ? "MATCH" : "MATCHES"} · KICKOFF AT {startTime}
+      </div>
+      <div style={{marginTop:14,fontSize:12,color:"rgba(255,255,255,0.35)",letterSpacing:1}}>
+        Stay on this page — it starts automatically.
+      </div>
+    </div>
   );
 }
 

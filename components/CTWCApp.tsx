@@ -1894,9 +1894,16 @@ function LiveBroadcastBanner({ tournament }: any) {
   const ROUND_MATCH_COUNT: Record<number,number> = {2:8, 3:4, 4:2, 5:1};
   const matchCount = ROUND_MATCH_COUNT[tournament.broadcast_round ?? 0] ?? 4;
   const totalWindowS = matchCount * 110 + 60;
-  if (elapsedS < 0 || elapsedS > totalWindowS) return null;
+  // Show during the warmup window (start in future) AND the live window.
+  // Hide only once we're past the end. warmup = elapsedS < 0.
+  if (elapsedS > totalWindowS) return null;
+  const isWarmup = elapsedS < 0;
   const ROUND_NAMES: Record<number,string> = {3:"QUARTER FINAL", 4:"SEMI FINAL", 5:"GRAND FINAL"};
   const roundName = ROUND_NAMES[tournament.broadcast_round ?? 0] ?? "LIVE MATCH";
+  // Warmup countdown MM:SS
+  const remS = Math.max(0, Math.ceil(-elapsedS));
+  const mm = String(Math.floor(remS / 60)).padStart(2, "0");
+  const ss = String(remS % 60).padStart(2, "0");
 
   return (
     <a href="/watch" style={{
@@ -1911,15 +1918,17 @@ function LiveBroadcastBanner({ tournament }: any) {
         <div style={{display:"flex",alignItems:"center",gap:7}}>
           <div style={{width:10,height:10,borderRadius:"50%",background:"#fff",
             boxShadow:"0 0 12px rgba(255,255,255,0.9)",animation:"ppulse 1s ease-in-out infinite"}}/>
-          <span style={{fontSize:12,fontWeight:900,letterSpacing:3,color:"#fff"}}>● LIVE NOW</span>
+          <span style={{fontSize:12,fontWeight:900,letterSpacing:3,color:"#fff"}}>
+            {isWarmup ? "● STARTING SOON" : "● LIVE NOW"}
+          </span>
         </div>
         <span style={{fontSize:13,fontWeight:800,letterSpacing:2,color:"#fff"}}>
-          {roundName} BROADCASTING
+          {isWarmup ? `${roundName} BEGINS IN ${mm}:${ss}` : `${roundName} BROADCASTING`}
         </span>
         <span style={{display:"inline-flex",alignItems:"center",gap:7,
           padding:"6px 14px",borderRadius:8,
           background:"#fff",color:"#EF4444",fontSize:12,fontWeight:900,letterSpacing:2}}>
-          📺 WATCH LIVE →
+          📺 {isWarmup ? "TUNE IN →" : "WATCH LIVE →"}
         </span>
       </div>
       <style>{`
