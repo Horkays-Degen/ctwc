@@ -1860,11 +1860,11 @@ function NotificationStack({ notifications, onDismiss, onClick }: any) {
 // will be simulated (kicks off). Used by the landing countdown banner
 // to tell visitors when to be on the site for each round.
 const ROUND_DATES: Record<number, string> = {
-  1: "2026-05-19T20:00:00Z", // R32 — Tuesday May 19, 8pm UTC
-  2: "2026-05-26T20:00:00Z", // R16 — Tuesday May 26, 8pm UTC
-  3: "2026-06-02T20:00:00Z", // QF  — Tuesday June 2,  8pm UTC
-  4: "2026-06-08T20:00:00Z", // SF  — Monday June 8,   8pm UTC
-  5: "2026-06-10T20:00:00Z", // 🏆 Final — Wednesday June 10, 8pm UTC
+  1: "2026-05-19T20:00:00Z", // R32 — Tuesday May 19, 8pm UTC (done)
+  2: "2026-05-26T20:00:00Z", // R16 — Tuesday May 26, 8pm UTC (done)
+  3: "2026-06-02T20:00:00Z", // QF  — Tuesday June 2,  8pm UTC (done)
+  4: "2026-06-08T17:00:00Z", // SF  — Monday June 8,   6pm WAT (17:00 UTC)
+  5: "2026-06-10T17:00:00Z", // 🏆 Final — Wednesday June 10, 6pm WAT (17:00 UTC) · day before World Cup
 };
 const ROUND_LABELS: Record<number, string> = {
   1: "R32", 2: "R16", 3: "QF", 4: "SF", 5: "GRAND FINAL",
