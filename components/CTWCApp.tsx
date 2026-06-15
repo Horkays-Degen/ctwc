@@ -4971,6 +4971,11 @@ function BracketPage({ teams, onBack, tournament, matches, onTeamClick }: any) {
   const rSFWinner    = winnerTeam(4, 2);
   const champion     = winnerTeam(5, 1);
 
+  // 3rd-place playoff (stored as synthetic round 6, match 1)
+  const thirdMatch   = matchData(6, 1);
+  const thirdHome    = thirdMatch ? teamById[thirdMatch.home_id] : null;
+  const thirdAway    = thirdMatch ? teamById[thirdMatch.away_id] : null;
+
   return (
     <div style={{minHeight:"100vh",background:"#070B14",color:"#fff",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <Nav onHome={onBack}/>
@@ -5113,7 +5118,7 @@ function BracketPage({ teams, onBack, tournament, matches, onTeamClick }: any) {
               gold={true} round={5} matchNum={1}/>
 
             {/* ══ 3RD PLACE ══ */}
-            <Match x={FX} top={trdT} t1={null} t2={null}/>
+            <Match x={FX} top={trdT} t1={thirdHome} t2={thirdAway} round={6} matchNum={1}/>
 
           </svg>
         </div>
